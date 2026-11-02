@@ -20,12 +20,15 @@ The application is named **NexFetch**. It is intended to grow into a universal d
 6. Support keyboard navigation, visible focus, accessible names, good contrast, and reduced motion.
 
 ## YouTube MVP main screen
-- Compact NexFetch header with settings/help actions.
+- Persistent left navigation with brand, Downloads/History/Settings, active-download module, system status, version, and theme toggle.
 - Paste-friendly URL input with validation and a clear fetch action.
 - Video detail card: thumbnail, title, channel/uploader, duration, and source.
 - “Best available up to 4K” preset and a clear list of actual formats available up to 2160p.
-- Format details: resolution, FPS, container, codec, size estimate or “Unknown,” and audio/video indicators.
-- Queue with progress, speed/ETA where reliable, cancel, retry, completion, and open destination folder.
+- Format details: resolution, FPS, container, codec, and audio/video indicators. Unknown sizes render as blank space, not placeholder text.
+- Persistent right-side activity queue with active/queued and recent groups.
+- Queue cards: two-line title, status, percent, speed, downloaded/total size, ETA, progress bar, and icon actions for stop, restart, open folder, and clear.
+- Downloading status pulses gently to communicate continuous activity.
+- Completed records clear through an inline alert/confirmation strip with check and cancel icons, followed by a gentle card-removal animation. Downloaded files are never deleted.
 - Helpful empty, loading, no-format, dependency-missing, and error states.
 
 ## Universal-manager direction
@@ -37,7 +40,10 @@ Design the shared queue/job components so future HTTP and BitTorrent jobs can ap
 - Preserve the URL and fetched metadata if the user changes format selection.
 - Use determinate progress only when it is reliable; otherwise show an indeterminate state.
 - Distinguish cancelled, failed, completed, queued, and active states.
-- Confirm destructive actions, not ordinary navigation.
+- Confirm destructive actions inline inside the affected card, not with a blocking native dialog. Clearing history must never delete downloaded files.
+- Animate confirmation and removal gently, and respect reduced-motion preferences.
+- Keep the sidebar idle state quiet: show “No active downloads” without an irrelevant View queue link.
+- Hide scrollbars visually only while preserving wheel, trackpad, and keyboard scrolling.
 - Handle long titles, missing thumbnails, unknown metadata, unknown file sizes, narrow windows, and long format lists.
 - Reuse existing components and dependencies; do not add a UI library without checking the repository.
 

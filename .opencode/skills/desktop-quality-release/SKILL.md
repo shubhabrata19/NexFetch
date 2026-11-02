@@ -23,6 +23,17 @@ Inspect scripts, test framework, architecture, supported OS targets, and existin
 - Unsupported capabilities are not shown as functional UI actions.
 - Engine errors are sanitized into stable user-facing messages.
 
+## Desktop UI regression tests
+- System theme is the default and follows OS changes; sidebar light/dark toggle updates both the rendered theme and persisted setting; Settings stays in sync.
+- Queue cards show a two-line title, status, percent, speed, downloaded/total size, ETA, and progress bar without clipping at both wide and narrow rail widths.
+- Unknown sizes render as blank space and do not leave dangling separators in selection summaries.
+- Downloading status pulses only while downloading and is static under reduced motion.
+- Sidebar shows stop controls for active jobs and collapses to a quiet idle message with no View queue link when nothing is active.
+- Clearing a completed job shows an inline alert with check/cancel icons, never a native dialog. Confirming removes the record with animation, and the downloaded file remains on disk.
+- Failed/cancelled records clear directly with the same removal animation.
+- Scrollbars stay visually hidden while mouse, trackpad, and keyboard scrolling remain functional.
+- Focus rings, tooltips, and accessible labels are present on icon-only controls.
+
 ## HTTP adapter tests (when implemented)
 Range/resume support detection, redirects, unknown content length, server errors, filename collisions, cancellation, checksums when used, and safe path handling.
 
