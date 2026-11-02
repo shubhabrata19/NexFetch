@@ -125,14 +125,14 @@ npm run icons        # regenerate platform icons
 The current Windows review build is produced with:
 
 ```bash
-npx electron-builder --win nsis -c.directories.output=release/final
+npx electron-builder --win nsis -c.directories.output=release/v0.3.2
 ```
 
 Outputs:
 
 ```text
-release/final/NexFetch Setup 0.2.0.exe
-release/final/win-unpacked/NexFetch.exe
+release/v0.3.2/NexFetch Setup 0.3.2.exe
+release/v0.3.2/win-unpacked/NexFetch.exe
 ```
 
 The installer is currently unsigned, so Windows SmartScreen may warn. The
