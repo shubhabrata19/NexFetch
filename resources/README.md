@@ -1,9 +1,8 @@
 # Bundled runtime dependencies
 
-NexFetch will ship pinned, verified copies of `yt-dlp`, `ffmpeg`, and `ffprobe`
-inside this directory for release builds.
+NexFetch uses `yt-dlp`, `ffmpeg`, and `ffprobe` for the YouTube MVP.
 
-Expected layout:
+## Layout
 
 ```text
 resources/
@@ -24,8 +23,34 @@ resources/
   binaries.manifest.json
 ```
 
-The binaries are intentionally not committed yet. Phase 2 adds the pinned
-versions, SHA-256 manifest, license notices, and packaging verification.
+`resources/bin/*` is ignored by Git because the binaries are large. The
+`.gitkeep` file keeps the parent directory available in clean checkouts.
 
-During development, the starter package can also find tools on `PATH` or via
+## Development
+
+On Windows:
+
+```bash
+npm run fetch:win-binaries
+```
+
+This downloads a development copy of yt-dlp and an LGPL FFmpeg build. It is a
+convenience script, not a release supply-chain process.
+
+During development, tools can also be found on `PATH` or via
 `NXF_YTDLP_PATH`, `NXF_FFMPEG_PATH`, and `NXF_FFPROBE_PATH`.
+
+## Packaging
+
+`electron-builder.yml` copies `resources/bin` to `resources/bin` inside the
+packaged application through `extraResources`. `DependencyService` resolves
+`process.resourcesPath/bin/<platform>-<arch>/...` in packaged builds.
+
+Before a public release:
+
+- Pin exact binary versions.
+- Add SHA-256 entries in `binaries.manifest.json` and verify them at startup.
+- Include license notices and source offers.
+- Sign nested executables on macOS and Windows.
+- Review FFmpeg's build configuration and licensing.
+- Do not fetch or execute unverified binaries at runtime.

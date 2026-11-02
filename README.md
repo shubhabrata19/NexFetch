@@ -4,32 +4,45 @@ NexFetch is a modern desktop download manager designed to grow from a focused
 YouTube downloader into a universal download manager with independent protocol
 engines.
 
-This repository currently contains the **Phase 1 foundation**: a secure Electron
-shell, typed IPC, persistent settings, dependency detection, protocol-neutral
-download-engine contracts, and the 4K quality policy. The YouTube engine is the
-next milestone; no fake YouTube controls or future-engine screens are exposed.
+This repository currently contains the **YouTube MVP foundation**:
+
+- Secure Electron shell with strongly typed IPC.
+- YouTube URL validation, metadata preview, and actual format discovery.
+- Quality-first 4K selection and format list.
+- Real download queue with progress, cancellation, retry, completion, and history.
+- ffprobe verification of the merged output.
+- Bundled yt-dlp/FFmpeg binary detection for packaged builds.
+
+HTTP/HTTPS and BitTorrent remain later phases. Their controls are not shown until
+those engines exist.
 
 ## Current status
 
 - Secure Electron main/preload/renderer separation.
 - Context isolation, renderer sandboxing, Node integration disabled.
-- Allowlisted, typed IPC with Zod validation and origin checks.
-- Persistent application settings with atomic JSON replacement.
-- Runtime dependency detection for `yt-dlp`, FFmpeg, and ffprobe.
-- Protocol-neutral `DownloadEngine` contract and deterministic engine registry.
-- 4K-first quality policy with tests.
-- Cross-platform filename sanitization with tests.
-- Desktop UI shell for Downloads, History, and Settings.
+- Allowlisted, typed IPC with Zod validation and sender checks.
+- YouTube URL parsing for watch, youtu.be, Shorts, embed, mobile, and music URLs.
+- Metadata extraction through yt-dlp with bounded output and timeouts.
+- Actual format mapping up to 2160p; 8K is never offered.
+- “Best available up to 4K,” manual video selection, and audio-only selection.
+- Separate video/audio merging through yt-dlp and FFmpeg.
+- Progress, speed, ETA, cancellation, retry, output finalization, and conflict-safe
+  filenames.
+- ffprobe verification of resolution and audio presence before a job is marked
+  complete.
+- Persistent job history and settings in local JSON stores behind repository
+  interfaces. SQLite migration is planned for the universal-manager phase.
 - Structured local JSON logging with redaction and rotation.
+- Windows packaging with bundled runtime binaries.
 
 Not implemented yet:
 
-- YouTube metadata extraction and download execution.
-- Bundled `yt-dlp`/FFmpeg binaries and checksum verification.
-- Download queue orchestration and job persistence.
+- User-facing pause/resume for YouTube downloads.
+- Playlist/channel/live-stream downloads.
 - HTTP/HTTPS engine.
 - BitTorrent engine.
-- Pause/resume, scheduling, bandwidth controls, and notifications.
+- Scheduling, bandwidth controls, notifications, and auto-update.
+- Public third-party plugins or a marketplace.
 
 ## 4K quality policy
 
@@ -40,30 +53,51 @@ The first release is quality-first:
 - True 4K may use VP9/AV1 + Opus and produce MKV. MKV is accepted.
 - NexFetch will not silently downgrade to 1080p just to produce MP4.
 - Separate video/audio streams require FFmpeg.
-- The final output will be verified with `ffprobe` before being labeled 4K.
+- The final output is verified with `ffprobe` before being labeled 4K.
 - Manual MP4-compatible selections remain available when codecs support them.
+- A real 6-second CC0 2160p video has been downloaded, merged, and verified at
+  3840×2160 with an audio track during development.
 
 ## Prerequisites
 
 - Node.js 22.12 or newer.
 - npm.
-- For actual downloads (next milestone): `yt-dlp` and FFmpeg/ffprobe available on
-  `PATH`, or development overrides through `NXF_YTDLP_PATH`,
-  `NXF_FFMPEG_PATH`, and `NXF_FFPROBE_PATH`.
+- Runtime tools:
+  - `yt-dlp`
+  - `ffmpeg`
+  - `ffprobe`
 
-Release builds will bundle pinned, checksum-verified binaries instead of
-requiring a system installation.
+Development builds look in `resources/bin/<platform>-<arch>/`, then `PATH`, and
+allow `NXF_YTDLP_PATH`, `NXF_FFMPEG_PATH`, and `NXF_FFPROBE_PATH` overrides.
+Packaged builds use bundled binaries from `resources/bin` and do not trust
+renderer-provided executable paths.
+
+`resources/bin/` is intentionally ignored by Git because the binaries are large.
+On Windows, `npm run fetch:win-binaries` downloads a development copy. For local
+development, place the tools in:
+
+```text
+resources/bin/win32-x64/
+  yt-dlp.exe
+  ffmpeg.exe
+  ffprobe.exe
+```
+
+The release build includes that directory through `extraResources`. Before a
+public release, the binaries must be pinned, checksum-verified, and license
+reviewed.
 
 ## Commands
 
 ```bash
 npm install
 npm run dev          # Electron + Vite development
+npm run check        # typecheck + lint + tests
 npm run typecheck
 npm run lint
 npm run test
 npm run build        # production build into out/
-npm run package      # unpacked application
+npm run package      # unpacked application with resources
 npm run package:win  # Windows installer
 ```
 
@@ -71,12 +105,12 @@ npm run package:win  # Windows installer
 
 ```text
 src/
-  main/       Electron main process, IPC, services, engine registry
+  main/       Electron main process, IPC, services, engine registry, queue
   preload/    narrow contextBridge API
   renderer/   React UI
   shared/     domain models, IPC contracts, validation, pure policy code
-tests/        Vitest unit tests
-resources/    future bundled binaries and licenses
+tests/        Vitest unit and integration tests
+resources/    bundled binaries and licenses (binaries ignored by Git)
 ```
 
 ### Boundaries
@@ -85,9 +119,11 @@ resources/    future bundled binaries and licenses
 - The preload exposes only explicit application functions, never a generic IPC
   dispatcher.
 - The main process validates every IPC request.
-- Engines own protocol behavior; the core owns jobs, queueing, persistence, and
-  UI events.
+- Engines own protocol behavior; the core owns jobs, queueing, persistence,
+  workspace cleanup, verification, and UI events.
 - Engine-specific data stays in typed engine metadata, not the common job shape.
+- Child processes use argument arrays and `shell: false`; no user-controlled
+  values are interpolated into shell strings.
 - No dynamic plugin loader or public plugin marketplace is planned for the early
   releases.
 
@@ -96,21 +132,25 @@ resources/    future bundled binaries and licenses
 - `contextIsolation: true`, `sandbox: true`, `nodeIntegration: false`.
 - Strict CSP; remote code is not allowed.
 - External navigation and new windows are blocked.
-- User-controlled values are never interpolated into shell command strings.
-- Future child processes will be spawned with argument arrays and `shell: false`.
-- Output paths must remain inside the user-selected destination.
-- No cookies, credentials, DRM circumvention, paywall bypass, or private-video
-  access is supported.
+- YouTube URLs are host-validated and canonicalized before use.
+- Output paths remain inside the user-selected destination.
+- Filename conflicts are resolved without silent overwrites.
+- No cookies, credentials, DRM circumvention, paywall bypass, private-video
+  access, or geo-bypass is supported.
+- Logs are local and redacted; no telemetry is sent.
 
 ## Next milestone
 
-1. Add the YouTube URL validator and metadata adapter.
-2. Map actual formats, enforce the 2160p cap, and implement the quality policy.
-3. Bundle/pin yt-dlp, FFmpeg, and ffprobe.
-4. Add the download queue, job persistence, progress events, cancellation, and
-   retry.
-5. Verify merged 4K output with ffprobe.
-6. Build the YouTube preview and format-selection UI.
+Phase 3 — universal manager core and HTTP/HTTPS:
+
+1. Replace the JSON job repository with SQLite behind the existing repository
+   interface.
+2. Add a unified source router and HTTP/HTTPS engine.
+3. Add Range-based resume, redirects, unknown content length, and optional
+   checksum support.
+4. Add scheduling and bandwidth controls.
+5. Add history filters and capability-driven HTTP controls.
+6. Harden large-file retry/resume behavior and release signing.
 
 See `.opencode/agents/` and `.opencode/skills/` for the project-specific
 architecture, UI, download-engine, torrent, and release guidance.

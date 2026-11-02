@@ -1,4 +1,5 @@
 .opencode/
+resources/bin/
 node_modules/
 out/
 release/

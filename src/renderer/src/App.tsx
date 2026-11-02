@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import type {
   AppInfo,
+  CreateJobRequest,
   DependencyStatus,
+  DownloadJob,
   Settings,
   SettingsPatch,
   Theme,
@@ -43,6 +45,7 @@ export default function App() {
   const [info, setInfo] = useState<AppInfo | null>(null)
   const [settings, setSettings] = useState<Settings | null>(null)
   const [dependencies, setDependencies] = useState<DependencyStatus | null>(null)
+  const [jobs, setJobs] = useState<DownloadJob[]>([])
   const [loading, setLoading] = useState(true)
   const [fatalError, setFatalError] = useState<string | null>(null)
   const [rechecking, setRechecking] = useState(false)
@@ -50,6 +53,16 @@ export default function App() {
 
   const showToast = useCallback((kind: ToastState['kind'], message: string): void => {
     setToast({ id: Date.now(), kind, message })
+  }, [])
+
+  const upsertJob = useCallback((job: DownloadJob): void => {
+    setJobs((previous) => {
+      const index = previous.findIndex((existing) => existing.id === job.id)
+      if (index === -1) return [job, ...previous]
+      const next = [...previous]
+      next[index] = job
+      return next
+    })
   }, [])
 
   const load = useCallback(async (): Promise<void> => {
@@ -62,10 +75,11 @@ export default function App() {
     setLoading(true)
     setFatalError(null)
 
-    const [infoResult, settingsResult, dependencyResult] = await Promise.all([
+    const [infoResult, settingsResult, dependencyResult, jobsResult] = await Promise.all([
       window.nexfetch.app.getInfo(),
       window.nexfetch.settings.get(),
       window.nexfetch.dependencies.getStatus(),
+      window.nexfetch.jobs.list(),
     ])
 
     if (!infoResult.ok) {
@@ -86,6 +100,11 @@ export default function App() {
     } else {
       showToast('error', dependencyResult.error.message)
     }
+    if (jobsResult.ok) {
+      setJobs(jobsResult.data)
+    } else {
+      showToast('error', jobsResult.error.message)
+    }
     setLoading(false)
   }, [showToast])
 
@@ -97,11 +116,17 @@ export default function App() {
     if (!window.nexfetch) return
     const unsubscribeSettings = window.nexfetch.settings.onChanged(setSettings)
     const unsubscribeDependencies = window.nexfetch.dependencies.onChanged(setDependencies)
+    const unsubscribeJobs = window.nexfetch.jobs.onChanged(upsertJob)
+    const unsubscribeRemoved = window.nexfetch.jobs.onRemoved((jobId) => {
+      setJobs((previous) => previous.filter((job) => job.id !== jobId))
+    })
     return () => {
       unsubscribeSettings()
       unsubscribeDependencies()
+      unsubscribeJobs()
+      unsubscribeRemoved()
     }
-  }, [])
+  }, [upsertJob])
 
   const theme = settings?.theme
   useEffect(() => {
@@ -179,6 +204,73 @@ export default function App() {
     }
   }, [showToast])
 
+  const createJob = useCallback(
+    async (request: CreateJobRequest): Promise<DownloadJob | null> => {
+      const result = await window.nexfetch.jobs.create(request)
+      if (!result.ok) {
+        showToast('error', result.error.message)
+        return null
+      }
+      upsertJob(result.data)
+      showToast('success', 'Added to the download queue.')
+      return result.data
+    },
+    [showToast, upsertJob],
+  )
+
+  const cancelJob = useCallback(
+    (jobId: string): void => {
+      void (async () => {
+        const result = await window.nexfetch.jobs.cancel({ jobId })
+        if (!result.ok) {
+          showToast('error', result.error.message)
+          return
+        }
+        upsertJob(result.data)
+      })()
+    },
+    [showToast, upsertJob],
+  )
+
+  const retryJob = useCallback(
+    (jobId: string): void => {
+      void (async () => {
+        const result = await window.nexfetch.jobs.retry({ jobId })
+        if (!result.ok) {
+          showToast('error', result.error.message)
+          return
+        }
+        upsertJob(result.data)
+        showToast('info', 'Download queued again.')
+      })()
+    },
+    [showToast, upsertJob],
+  )
+
+  const removeJob = useCallback(
+    (jobId: string): void => {
+      void (async () => {
+        const result = await window.nexfetch.jobs.remove({ jobId })
+        if (!result.ok) {
+          showToast('error', result.error.message)
+          return
+        }
+        setJobs((previous) => previous.filter((job) => job.id !== jobId))
+      })()
+    },
+    [showToast],
+  )
+
+  const openJobLocation = useCallback(
+    (jobId: string, revealFile: boolean): void => {
+      void (async () => {
+        const result = await window.nexfetch.jobs.openLocation({ jobId, revealFile })
+        if (!result.ok) showToast('error', result.error.message)
+      })()
+    },
+    [showToast],
+  )
+
   if (loading) return <BootScreen />
 
   if (fatalError || !settings || !info) {
@@ -204,19 +296,30 @@ export default function App() {
       <main className="main-scroll">
         {view === 'downloads' ? (
           <DownloadsPage
+            settings={settings}
             dependencies={dependencies}
-            rechecking={rechecking}
+            jobs={jobs}
+            onCreateJob={createJob}
+            onCancelJob={cancelJob}
+            onRetryJob={retryJob}
+            onRemoveJob={removeJob}
+            onOpenJobLocation={openJobLocation}
             onOpenDestination={() => {
               void openDestination()
             }}
             onOpenSettings={() => setView('settings')}
-            onRecheck={() => {
-              void recheckDependencies()
-            }}
           />
         ) : null}
 
-        {view === 'history' ? <HistoryPage /> : null}
+        {view === 'history' ? (
+          <HistoryPage
+            jobs={jobs}
+            onCancelJob={cancelJob}
+            onRetryJob={retryJob}
+            onRemoveJob={removeJob}
+            onOpenJobLocation={openJobLocation}
+          />
+        ) : null}
 
         {view === 'settings' ? (
           <SettingsPage

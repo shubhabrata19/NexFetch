@@ -1,6 +1,6 @@
 {
   "name": "nexfetch",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "NexFetch — a modern universal download manager for desktop",
   "private": true,
   "license": "UNLICENSED",
@@ -18,9 +18,10 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "fetch:win-binaries": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/fetch-win-binaries.ps1",
     "test": "vitest run",
     "test:watch": "vitest",
-    "postinstall": "node node_modules/electron/install.js",
+    "postinstall": "node scripts/ensure-electron.cjs",
     "package": "npm run build && electron-builder --dir",
     "package:win": "npm run build && electron-builder --win",
     "dist": "npm run build && electron-builder"

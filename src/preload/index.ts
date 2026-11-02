@@ -35,6 +35,20 @@ const api: NexFetchApi = {
     recheck: () => invoke(IPC.dependenciesRecheck),
     onChanged: (listener) => subscribe(IPC.dependenciesChanged, listener),
   },
+  youtube: {
+    preview: (url, requestId) => invoke(IPC.youtubePreview, { url, requestId }),
+    cancelPreview: (requestId) => invoke(IPC.youtubeCancelPreview, { requestId }),
+  },
+  jobs: {
+    create: (request) => invoke(IPC.jobsCreate, request),
+    list: () => invoke(IPC.jobsList),
+    cancel: (request) => invoke(IPC.jobsCancel, request),
+    retry: (request) => invoke(IPC.jobsRetry, request),
+    remove: (request) => invoke(IPC.jobsRemove, request),
+    openLocation: (request) => invoke(IPC.jobsOpenLocation, request),
+    onChanged: (listener) => subscribe(IPC.jobsChanged, listener),
+    onRemoved: (listener) => subscribe(IPC.jobsRemoved, listener),
+  },
 }
 
 contextBridge.exposeInMainWorld('nexfetch', Object.freeze(api))

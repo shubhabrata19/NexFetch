@@ -31,10 +31,10 @@ export interface QualityPolicyOptions {
   preferSdr?: boolean
 }
 
-export interface QualityChoice {
+export interface QualityChoice<TFormat extends VideoFormat = VideoFormat> {
   mode: 'video' | 'audio'
-  video: VideoFormat | null
-  audio: VideoFormat | null
+  video: TFormat | null
+  audio: TFormat | null
   requiresFfmpeg: boolean
   estimatedBytes: number | null
   predictedContainer: string
@@ -97,30 +97,30 @@ export function isAudioOnlyFormat(format: VideoFormat): boolean {
   return format.hasAudio && !format.hasVideo
 }
 
-export function selectBestVideo(
-  formats: readonly VideoFormat[],
+export function selectBestVideo<TFormat extends VideoFormat>(
+  formats: readonly TFormat[],
   options: QualityPolicyOptions = {},
-): VideoFormat | null {
+): TFormat | null {
   const preferSdr = options.preferSdr ?? true
   const candidates = formats.filter(isEligibleVideoFormat)
   if (candidates.length === 0) return null
   return [...candidates].sort((a, b) => compareVideo(a, b, preferSdr))[0] ?? null
 }
 
-export function selectBestProgressive(
-  formats: readonly VideoFormat[],
+export function selectBestProgressive<TFormat extends VideoFormat>(
+  formats: readonly TFormat[],
   options: QualityPolicyOptions = {},
-): VideoFormat | null {
+): TFormat | null {
   const preferSdr = options.preferSdr ?? true
   const candidates = formats.filter((format) => isEligibleVideoFormat(format) && format.hasAudio)
   if (candidates.length === 0) return null
   return [...candidates].sort((a, b) => compareVideo(a, b, preferSdr))[0] ?? null
 }
 
-export function selectBestAudio(
-  formats: readonly VideoFormat[],
+export function selectBestAudio<TFormat extends VideoFormat>(
+  formats: readonly TFormat[],
   preferredExtensions: readonly string[] = [],
-): VideoFormat | null {
+): TFormat | null {
   const candidates = formats.filter(isAudioOnlyFormat)
   if (candidates.length === 0) return null
   return [...candidates].sort((a, b) => compareAudio(a, b, preferredExtensions))[0] ?? null
@@ -133,15 +133,19 @@ function sumKnown(a: number | null, b: number | null): number | null {
 
 function predictContainer(video: VideoFormat, audio: VideoFormat | null): string {
   if (!audio || video.hasAudio) return video.ext
-  const videosAreMp4 = video.ext === 'mp4'
+
+  // MP4 is chosen only when both streams are broadly MP4-compatible. Quality
+  // is unaffected by remuxing; MKV is the honest default for VP9/AV1/Opus.
+  const videoCodec = video.videoCodec?.toLowerCase() ?? ''
+  const videosAreH264 = videoCodec.includes('avc') || videoCodec.includes('h264')
   const audioIsMp4Compatible = ['m4a', 'mp4', 'aac'].includes(audio.ext)
-  return videosAreMp4 && audioIsMp4Compatible ? 'mp4' : 'mkv'
+  return videosAreH264 && audioIsMp4Compatible ? 'mp4' : 'mkv'
 }
 
-export function selectBestUpTo4k(
-  formats: readonly VideoFormat[],
+export function selectBestUpTo4k<TFormat extends VideoFormat>(
+  formats: readonly TFormat[],
   options: QualityPolicyOptions = {},
-): QualityChoice | null {
+): QualityChoice<TFormat> | null {
   const video = selectBestVideo(formats, options)
   if (!video) return null
 
@@ -184,7 +188,9 @@ export function selectBestUpTo4k(
   }
 }
 
-export function selectBestAudioOnly(formats: readonly VideoFormat[]): QualityChoice | null {
+export function selectBestAudioOnly<TFormat extends VideoFormat>(
+  formats: readonly TFormat[],
+): QualityChoice<TFormat> | null {
   const audio = selectBestAudio(formats)
   if (!audio) return null
   return {

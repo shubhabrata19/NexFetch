@@ -1,4 +1,6 @@
+import type { DownloadJob } from '../domain/job'
 import type { AppError } from '../domain/errors'
+import type { YoutubePreviewEnvelope, YoutubeSelection } from '../domain/youtube'
 
 export type Result<T> = { ok: true; data: T } | { ok: false; error: AppError }
 
@@ -35,3 +37,25 @@ export interface DependencyStatus {
   ffmpeg: DependencyInfo
   ffprobe: DependencyInfo
 }
+
+export interface CreateJobRequest {
+  previewToken: string
+  selection: YoutubeSelection
+  destination: string
+}
+
+export interface YoutubePreviewRequest {
+  url: string
+  requestId: string
+}
+
+export interface JobIdRequest {
+  jobId: string
+}
+
+export interface OpenLocationRequest {
+  jobId: string
+  revealFile?: boolean
+}
+
+export type { DownloadJob, YoutubePreviewEnvelope, YoutubeSelection }

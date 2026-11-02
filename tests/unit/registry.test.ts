@@ -43,6 +43,8 @@ function fakeEngine(id: string, match: (input: SourceInput) => EngineMatch | nul
       data: null,
       requiredDependencies: [],
       filenameBase: 'test',
+      details: null,
+      verification: null,
     }),
     start: async () => ({
       output: { kind: 'file', path: '/tmp/test' },

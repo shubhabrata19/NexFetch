@@ -5,6 +5,8 @@ dist/
 coverage/
 *.log
 *.tmp
+resources/bin/*
+!resources/bin/.gitkeep
 .DS_Store
 Thumbs.db
 .env

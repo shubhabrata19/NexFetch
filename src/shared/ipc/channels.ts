@@ -9,6 +9,16 @@ export const IPC = {
   dependenciesStatus: 'dependencies:status',
   dependenciesRecheck: 'dependencies:recheck',
   dependenciesChanged: 'dependencies:changed',
+  youtubePreview: 'youtube:preview',
+  youtubeCancelPreview: 'youtube:cancel-preview',
+  jobsCreate: 'jobs:create',
+  jobsList: 'jobs:list',
+  jobsCancel: 'jobs:cancel',
+  jobsRetry: 'jobs:retry',
+  jobsRemove: 'jobs:remove',
+  jobsOpenLocation: 'jobs:open-location',
+  jobsChanged: 'jobs:changed',
+  jobsRemoved: 'jobs:removed',
 } as const
 
 export type IpcChannel = (typeof IPC)[keyof typeof IPC]

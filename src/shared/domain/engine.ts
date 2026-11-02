@@ -37,7 +37,9 @@ export interface EngineContext {
 
 export interface EngineRunContext extends EngineContext {
   job: DownloadJob
+  selection: EngineSelection
   workspaceDir: string
+  resume: boolean
   emit(event: EngineEvent): void
 }
 
@@ -65,14 +67,19 @@ export interface EnginePreviewData {
   subtitle: string | null
   thumbnailUrl: string | null
   durationSeconds: number | null
-  engineData: unknown
+  data: unknown
 }
 
 export interface EngineSelection {
   engineId: EngineId
   data: unknown
-  requiredDependencies: readonly ('yt-dlp' | 'ffmpeg')[]
+  requiredDependencies: readonly ('yt-dlp' | 'ffmpeg' | 'ffprobe')[]
   filenameBase: string
+  details: EngineDetails | null
+  verification: {
+    expectedVideoHeight: number | null
+    requireAudio: boolean
+  } | null
 }
 
 export interface DownloadEngine {

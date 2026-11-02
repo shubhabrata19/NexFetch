@@ -6,9 +6,18 @@ import { isAbsolute } from 'node:path'
 import type { ZodType } from 'zod'
 import { DomainError } from '@shared/domain/errors'
 import type { ErrorCode } from '@shared/domain/errors'
-import type { AppInfo, Result } from '@shared/ipc/contracts'
+import type { AppInfo, DownloadJob, Result } from '@shared/ipc/contracts'
 import { IPC } from '@shared/ipc/channels'
+import {
+  createJobRequestSchema,
+  jobIdRequestSchema,
+  openLocationRequestSchema,
+  youtubeCancelPreviewSchema,
+  youtubePreviewRequestSchema,
+} from '@shared/validation/jobs'
 import { settingsPatchSchema } from '@shared/validation/settings'
+import type { DownloadManager } from '../download/download-manager'
+import type { YoutubePreviewService } from '../download/youtube-preview-service'
 import type { DependencyService } from '../services/dependency-service'
 import type { Logger } from '../services/logger'
 import type { SettingsService } from '../services/settings-service'
@@ -17,6 +26,8 @@ interface IpcDependencies {
   getWindow: () => BrowserWindow | null
   settings: SettingsService
   dependencies: DependencyService
+  youtubePreview: YoutubePreviewService
+  downloadManager: DownloadManager
   logger: Logger
 }
 
@@ -29,6 +40,14 @@ const INVOKE_CHANNELS = [
   IPC.openLogs,
   IPC.dependenciesStatus,
   IPC.dependenciesRecheck,
+  IPC.youtubePreview,
+  IPC.youtubeCancelPreview,
+  IPC.jobsCreate,
+  IPC.jobsList,
+  IPC.jobsCancel,
+  IPC.jobsRetry,
+  IPC.jobsRemove,
+  IPC.jobsOpenLocation,
 ] as const
 
 function success<T>(data: T): Result<T> {
@@ -55,7 +74,15 @@ function failure(
 }
 
 export function registerIpc(dependencies: IpcDependencies): () => void {
-  const { getWindow, settings, dependencies: dependencyService, logger } = dependencies
+  const {
+    getWindow,
+    settings,
+    dependencies: dependencyService,
+    youtubePreview,
+    downloadManager,
+    logger,
+  } = dependencies
+  const previewControllers = new Map<string, AbortController>()
 
   const isTrustedSender = (event: IpcMainInvokeEvent): boolean => {
     const window = getWindow()
@@ -140,6 +167,7 @@ export function registerIpc(dependencies: IpcDependencies): () => void {
     const updated = settings.update(patch)
     nativeTheme.themeSource = updated.theme
     getWindow()?.webContents.send(IPC.settingsChanged, updated)
+    downloadManager.refreshQueue()
     logger.info('settings_updated', { keys: Object.keys(patch).sort() })
     return updated
   })
@@ -199,7 +227,71 @@ export function registerIpc(dependencies: IpcDependencies): () => void {
     },
   )
 
+  handle(IPC.youtubePreview, youtubePreviewRequestSchema, async ({ url, requestId }) => {
+    for (const [existingId, controller] of previewControllers) {
+      if (existingId !== requestId) {
+        controller.abort()
+        previewControllers.delete(existingId)
+      }
+    }
+
+    const controller = new AbortController()
+    previewControllers.set(requestId, controller)
+    try {
+      return await youtubePreview.preview(url, controller.signal)
+    } finally {
+      previewControllers.delete(requestId)
+    }
+  })
+
+  handle(IPC.youtubeCancelPreview, youtubeCancelPreviewSchema, ({ requestId }) => {
+    previewControllers.get(requestId)?.abort()
+    previewControllers.delete(requestId)
+    return null
+  })
+
+  handle(IPC.jobsCreate, createJobRequestSchema, (request) => downloadManager.createJob(request))
+
+  handle<void, DownloadJob[]>(IPC.jobsList, null, () => downloadManager.listJobs())
+
+  handle(IPC.jobsCancel, jobIdRequestSchema, ({ jobId }) => downloadManager.cancelJob(jobId))
+
+  handle(IPC.jobsRetry, jobIdRequestSchema, ({ jobId }) => downloadManager.retryJob(jobId))
+
+  handle(IPC.jobsRemove, jobIdRequestSchema, async ({ jobId }) => {
+    await downloadManager.removeJob(jobId)
+    return null
+  })
+
+  handle(IPC.jobsOpenLocation, openLocationRequestSchema, async ({ jobId, revealFile }) => {
+    const job = downloadManager.getJob(jobId)
+    if (!job) throw new DomainError('INVALID_REQUEST', 'The download job was not found.')
+
+    if (job.output) {
+      if (revealFile && job.output.files[0]) {
+        shell.showItemInFolder(job.output.files[0].path)
+        return null
+      }
+      const error = await shell.openPath(job.output.directory)
+      if (error) {
+        logger.warn('open_job_destination_failed', { error })
+        throw new DomainError('PERMISSION_DENIED', 'The download folder could not be opened.')
+      }
+      return null
+    }
+
+    await mkdir(job.destination, { recursive: true })
+    const error = await shell.openPath(job.destination)
+    if (error) {
+      logger.warn('open_job_destination_failed', { error })
+      throw new DomainError('PERMISSION_DENIED', 'The download folder could not be opened.')
+    }
+    return null
+  })
+
   return () => {
+    for (const controller of previewControllers.values()) controller.abort()
+    previewControllers.clear()
     for (const channel of INVOKE_CHANNELS) ipcMain.removeHandler(channel)
   }
 }

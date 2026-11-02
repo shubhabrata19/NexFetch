@@ -53,6 +53,11 @@ function isExecutableFile(candidate: string): boolean {
 export class DependencyService {
   constructor(private readonly options: DependencyServiceOptions) {}
 
+  resolve(id: DependencyId): { path: string; version: string | null } | null {
+    const resolved = this.resolveExecutable(id)
+    return resolved ? { path: resolved.path, version: null } : null
+  }
+
   async getStatus(): Promise<DependencyStatus> {
     const [ytDlp, ffmpeg, ffprobe] = await Promise.all([
       this.check('yt-dlp'),

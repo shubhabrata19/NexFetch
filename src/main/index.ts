@@ -2,11 +2,20 @@ import { app, nativeTheme, session } from 'electron'
 import type { BrowserWindow } from 'electron'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { IPC } from '@shared/ipc/channels'
+import { DownloadManager } from './download/download-manager'
+import { JsonJobRepository } from './download/job-repository'
+import { PreviewCache } from './download/preview-cache'
+import { YoutubePreviewService } from './download/youtube-preview-service'
+import { EngineRegistry } from './engines/registry'
+import { YoutubeEngine } from './engines/youtube/youtube-engine'
 import { registerIpc } from './ipc/register-ipc'
 import { createAppMenu } from './menu'
 import { configureSession, hardenWebContents } from './security'
 import { DependencyService } from './services/dependency-service'
+import { FileService } from './services/file-service'
 import { Logger } from './services/logger'
+import { MediaVerifier } from './services/media-verifier'
 import { SettingsService } from './services/settings-service'
 import { createMainWindow } from './window'
 
@@ -17,7 +26,9 @@ app.enableSandbox()
 
 let mainWindow: BrowserWindow | null = null
 let logger: Logger | null = null
+let downloadManager: DownloadManager | null = null
 let disposeIpc: (() => void) | null = null
+let shuttingDown = false
 
 function getMainWindow(): BrowserWindow | null {
   return mainWindow
@@ -56,13 +67,20 @@ if (!gotSingleInstanceLock) {
     })
   })
 
-  app.on('before-quit', () => {
+  app.on('before-quit', (event) => {
     logger?.info('app_quitting')
+    if (!downloadManager || shuttingDown) return
+    shuttingDown = true
+    event.preventDefault()
+    void downloadManager.shutdown().finally(() => {
+      app.quit()
+    })
   })
 
   app.on('will-quit', () => {
     disposeIpc?.()
     disposeIpc = null
+    downloadManager = null
   })
 
   app.on('window-all-closed', () => {
@@ -114,10 +132,45 @@ if (!gotSingleInstanceLock) {
         allowEnvOverrides: !app.isPackaged,
       })
 
+      const registry = new EngineRegistry()
+      const youtubeEngine = new YoutubeEngine()
+      registry.register(youtubeEngine)
+
+      const jobs = new JsonJobRepository(join(app.getPath('userData'), 'jobs.json'))
+      const previewCache = new PreviewCache()
+      const fileService = new FileService()
+      const mediaVerifier = new MediaVerifier(dependencyService)
+      const youtubePreview = new YoutubePreviewService(
+        youtubeEngine,
+        previewCache,
+        dependencyService,
+        appLogger,
+      )
+
+      downloadManager = new DownloadManager({
+        registry,
+        jobs,
+        settings,
+        files: fileService,
+        verifier: mediaVerifier,
+        dependencies: dependencyService,
+        previews: previewCache,
+        logger: appLogger,
+        onJobChanged: (job) => {
+          getMainWindow()?.webContents.send(IPC.jobsChanged, job)
+        },
+        onJobRemoved: (jobId) => {
+          getMainWindow()?.webContents.send(IPC.jobsRemoved, jobId)
+        },
+      })
+      downloadManager.recoverInterruptedJobs()
+
       disposeIpc = registerIpc({
         getWindow: getMainWindow,
         settings,
         dependencies: dependencyService,
+        youtubePreview,
+        downloadManager,
         logger: appLogger,
       })
 
