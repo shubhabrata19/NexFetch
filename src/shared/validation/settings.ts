@@ -7,6 +7,7 @@ export const settingsSchema = z
     downloadDirectory: z.string().min(1).max(4096),
     maxConcurrentDownloads: z.number().int().min(1).max(5),
     concurrentFragments: z.number().int().min(1).max(16),
+    maxDownloadRateBytesPerSecond: z.number().int().min(0).max(1_000_000_000),
     theme: themeSchema,
   })
   .strict()

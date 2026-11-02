@@ -17,6 +17,7 @@ export interface Settings {
   downloadDirectory: string
   maxConcurrentDownloads: number
   concurrentFragments: number
+  maxDownloadRateBytesPerSecond: number
   theme: Theme
 }
 

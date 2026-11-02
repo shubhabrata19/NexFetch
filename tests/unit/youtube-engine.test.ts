@@ -70,6 +70,7 @@ function createContext(overrides: Partial<EngineRunContext> = {}): {
     workspaceDir,
     resume: false,
     concurrentFragments: 4,
+    maxDownloadRateBytesPerSecond: 0,
     signal: new AbortController().signal,
     logger: { info: () => undefined, warn: () => undefined, error: () => undefined },
     dependencies: {
@@ -160,5 +161,30 @@ describe('youtube engine', () => {
         event.type === 'progress' && event.downloadedBytes === 1000 && event.totalBytes === 1100,
     )
     expect(processingIndex).toBeGreaterThan(videoFinishedIndex)
+  })
+
+  it('omits --limit-rate when downloads are unlimited', async () => {
+    const { ctx, workspaceDir } = createContext()
+    const args: string[] = []
+    const engine = new YoutubeEngine(successfulRunner(workspaceDir, { args }))
+
+    await engine.start(ctx.job, ctx)
+
+    expect(args).not.toContain('--limit-rate')
+  })
+
+  it('divides the per-download speed limit across fragment connections', async () => {
+    const { ctx, workspaceDir } = createContext({
+      concurrentFragments: 4,
+      maxDownloadRateBytesPerSecond: 10 * 1024 * 1024,
+    })
+    const args: string[] = []
+    const engine = new YoutubeEngine(successfulRunner(workspaceDir, { args }))
+
+    await engine.start(ctx.job, ctx)
+
+    const index = args.indexOf('--limit-rate')
+    expect(index).toBeGreaterThanOrEqual(0)
+    expect(args[index + 1]).toBe(String(Math.ceil((10 * 1024 * 1024) / 4)))
   })
 })

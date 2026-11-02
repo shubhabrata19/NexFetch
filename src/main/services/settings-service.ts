@@ -20,6 +20,7 @@ export class SettingsService {
       downloadDirectory: options.defaultDownloadDirectory,
       maxConcurrentDownloads: 2,
       concurrentFragments: 4,
+      maxDownloadRateBytesPerSecond: 0,
       theme: 'system',
     }
     this.current = this.load()

@@ -42,6 +42,7 @@ export interface EngineRunContext extends EngineContext {
   workspaceDir: string
   resume: boolean
   concurrentFragments: number
+  maxDownloadRateBytesPerSecond: number
   emit(event: EngineEvent): void
 }
 

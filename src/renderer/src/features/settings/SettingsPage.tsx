@@ -21,6 +21,17 @@ function platformLabel(platform: string): string {
   return platform
 }
 
+const RATE_OPTIONS = [
+  { value: 0, label: 'Unlimited' },
+  { value: 512 * 1024, label: '512 KB/s' },
+  { value: 1 * 1024 * 1024, label: '1 MB/s' },
+  { value: 2 * 1024 * 1024, label: '2 MB/s' },
+  { value: 5 * 1024 * 1024, label: '5 MB/s' },
+  { value: 10 * 1024 * 1024, label: '10 MB/s' },
+  { value: 20 * 1024 * 1024, label: '20 MB/s' },
+  { value: 50 * 1024 * 1024, label: '50 MB/s' },
+] as const
+
 export function SettingsPage({
   settings,
   appInfo,
@@ -49,7 +60,8 @@ export function SettingsPage({
           <p className="eyebrow">Preferences</p>
           <h1>Settings</h1>
           <p className="page-subtitle">
-            Destination, concurrency, appearance, and local diagnostics. Changes save automatically.
+            Destination, concurrency, transfer limits, appearance, and local diagnostics. Changes
+            save automatically.
           </p>
         </div>
         {saving ? (
@@ -132,6 +144,32 @@ export function SettingsPage({
               {[1, 2, 3, 4, 6, 8, 12, 16].map((value) => (
                 <option key={value} value={value}>
                   {value} {value === 1 ? 'connection' : 'connections'}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="setting-row">
+            <div className="setting-label">
+              <label className="setting-name" htmlFor="setting-rate-limit">
+                Maximum download speed
+              </label>
+              <p>
+                Caps each download; parallel connections share the limit. Changes apply to new
+                downloads.
+              </p>
+            </div>
+            <select
+              id="setting-rate-limit"
+              className="select"
+              value={settings.maxDownloadRateBytesPerSecond}
+              onChange={(event) =>
+                void applyPatch({ maxDownloadRateBytesPerSecond: Number(event.target.value) })
+              }
+            >
+              {RATE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
                 </option>
               ))}
             </select>

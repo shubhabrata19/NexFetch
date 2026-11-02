@@ -323,6 +323,14 @@ export class YoutubeEngine implements DownloadEngine {
       if (/\[(Merger|VideoConvertor|Fixup)/i.test(line)) emitProcessing()
     }
 
+    const perConnectionRateLimit =
+      ctx.maxDownloadRateBytesPerSecond > 0
+        ? Math.max(
+            1,
+            Math.ceil(ctx.maxDownloadRateBytesPerSecond / Math.max(1, ctx.concurrentFragments)),
+          )
+        : null
+
     const args = [
       '--ignore-config',
       '--no-playlist',
@@ -339,6 +347,9 @@ export class YoutubeEngine implements DownloadEngine {
       '--no-colors',
       '--concurrent-fragments',
       String(ctx.concurrentFragments),
+      // yt-dlp applies --limit-rate per fragment connection, so split the
+      // per-download cap across the configured connections.
+      ...(perConnectionRateLimit !== null ? ['--limit-rate', String(perConnectionRateLimit)] : []),
       '-f',
       selection.selector,
       '--no-overwrites',

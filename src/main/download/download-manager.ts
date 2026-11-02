@@ -311,12 +311,14 @@ export class DownloadManager {
       this.options.jobs.save(job)
 
       const engine: DownloadEngine = this.options.registry.get(job.engineId)
+      const settings = this.options.settings.get()
       const context: EngineRunContext = {
         job: toJobView(job),
         selection: job.selection,
         workspaceDir: workspace,
         resume: job.attempt > 1,
-        concurrentFragments: this.options.settings.get().concurrentFragments,
+        concurrentFragments: settings.concurrentFragments,
+        maxDownloadRateBytesPerSecond: settings.maxDownloadRateBytesPerSecond,
         signal: runtime.controller.signal,
         logger: this.options.logger,
         dependencies: this.options.dependencies,

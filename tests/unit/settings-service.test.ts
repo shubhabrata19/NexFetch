@@ -39,6 +39,7 @@ describe('settings service', () => {
       downloadDirectory: fixture.downloadDirectory,
       maxConcurrentDownloads: 2,
       concurrentFragments: 4,
+      maxDownloadRateBytesPerSecond: 0,
       theme: 'system',
     })
 
@@ -74,6 +75,7 @@ describe('settings service', () => {
       downloadDirectory: customDirectory,
       maxConcurrentDownloads: 3,
       concurrentFragments: 4,
+      maxDownloadRateBytesPerSecond: 0,
       theme: 'dark',
     })
   })
@@ -88,11 +90,13 @@ describe('settings service', () => {
     const updated = service.update({
       maxConcurrentDownloads: 4,
       concurrentFragments: 8,
+      maxDownloadRateBytesPerSecond: 2 * 1024 * 1024,
       theme: 'dark',
     })
 
     expect(updated.maxConcurrentDownloads).toBe(4)
     expect(updated.concurrentFragments).toBe(8)
+    expect(updated.maxDownloadRateBytesPerSecond).toBe(2 * 1024 * 1024)
     expect(updated.theme).toBe('dark')
 
     const reloaded = new SettingsService({
@@ -112,6 +116,7 @@ describe('settings service', () => {
     expect(() => service.update({ maxConcurrentDownloads: 99 })).toThrow()
     expect(() => service.update({ concurrentFragments: 0 })).toThrow()
     expect(() => service.update({ concurrentFragments: 17 })).toThrow()
+    expect(() => service.update({ maxDownloadRateBytesPerSecond: -1 })).toThrow()
   })
 
   it('recovers from a corrupt settings file', () => {
@@ -126,5 +131,6 @@ describe('settings service', () => {
     expect(service.get().theme).toBe('system')
     expect(service.get().maxConcurrentDownloads).toBe(2)
     expect(service.get().concurrentFragments).toBe(4)
+    expect(service.get().maxDownloadRateBytesPerSecond).toBe(0)
   })
 })
