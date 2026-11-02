@@ -1,5 +1,7 @@
+import { useEffect, useRef, useState } from 'react'
 import type { DownloadJob, JobStatus } from '@shared/domain/job'
 import { Icon } from './Icon'
+import { isTerminalStatus } from '../lib/jobs'
 import { formatBytes, formatEta, formatSpeed } from '../lib/format'
 
 interface JobListProps {
@@ -25,10 +27,6 @@ const STATUS_LABELS: Record<JobStatus, string> = {
   completed: 'Completed',
   failed: 'Failed',
   cancelled: 'Cancelled',
-}
-
-export function isTerminal(status: JobStatus): boolean {
-  return status === 'completed' || status === 'failed' || status === 'cancelled'
 }
 
 function statusTone(status: JobStatus): string {
@@ -74,10 +72,22 @@ export function JobRow({
   onRemove: (jobId: string) => void
   onOpenLocation: (jobId: string, revealFile: boolean) => void
 }) {
-  const terminal = isTerminal(job.status)
+  const terminal = isTerminalStatus(job.status)
   const detail = jobDetailLine(job)
   const percent = job.progress.percent
   const showProgress = isProgressStatus(job.status)
+  const [completionFlash, setCompletionFlash] = useState(false)
+  const previousStatus = useRef(job.status)
+
+  useEffect(() => {
+    const previous = previousStatus.current
+    previousStatus.current = job.status
+    if (job.status !== 'completed' || previous === 'completed') return
+
+    setCompletionFlash(true)
+    const timer = window.setTimeout(() => setCompletionFlash(false), 900)
+    return () => window.clearTimeout(timer)
+  }, [job.status])
 
   const handleRemove = (): void => {
     if (
@@ -89,64 +99,94 @@ export function JobRow({
 
   return (
     <article
-      className={`job-row${compact ? ' job-row--compact' : ''}`}
+      className={`job-row job-row--${job.status}${compact ? ' job-row--compact' : ''}${
+        completionFlash ? ' job-row--just-completed' : ''
+      }`}
       aria-label={`${job.title}, ${STATUS_LABELS[job.status]}`}
     >
-      <div className="job-main">
-        <div className="job-title-line">
-          <span className={`badge job-status ${statusTone(job.status)}`}>
-            {STATUS_LABELS[job.status]}
-          </span>
-          <span className="job-engine">YouTube</span>
-          {detail ? <span className="job-detail">{detail}</span> : null}
-        </div>
-        <h3 className="job-title" title={job.title}>
-          {job.title}
-        </h3>
-
-        {showProgress ? (
-          <div
-            className={`progress-track${percent === null ? ' progress-track--indeterminate' : ''}`}
-            role="progressbar"
-            aria-label={`Download progress for ${job.title}`}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={percent ?? undefined}
-          >
-            <span
-              className="progress-fill"
-              style={percent !== null ? { width: `${percent}%` } : undefined}
+      <div className="job-row-content">
+        <div className="job-thumb">
+          {job.details?.engineId === 'youtube' && job.details.thumbnailUrl ? (
+            <img
+              src={job.details.thumbnailUrl}
+              alt=""
+              loading="lazy"
+              referrerPolicy="no-referrer"
             />
-          </div>
-        ) : null}
-
-        <div className="job-meta">
-          {job.status === 'completed' ? (
-            <span>{jobSize(job)}</span>
-          ) : job.status === 'failed' || job.status === 'cancelled' ? (
-            <span>{jobSize(job)}</span>
           ) : (
-            <>
-              <span>
-                {formatBytes(job.progress.downloadedBytes)} / {formatBytes(job.progress.totalBytes)}
-              </span>
-              <span>{formatSpeed(job.progress.bytesPerSecond)}</span>
-              <span>ETA {formatEta(job.progress.etaSeconds)}</span>
-            </>
+            <Icon name="download" size={compact ? 16 : 20} />
           )}
-          {job.output?.files[0] ? (
-            <span className="job-output" title={job.output.files[0].path}>
-              {job.output.files[0].path.split(/[\\/]/).pop()}
+        </div>
+        <div className="job-main">
+          <div className="job-title-line">
+            <span className={`badge job-status ${statusTone(job.status)}`}>
+              {STATUS_LABELS[job.status]}
             </span>
+            <span className="job-engine">YouTube</span>
+            {detail ? <span className="job-detail">{detail}</span> : null}
+          </div>
+          <h3 className="job-title" title={job.title}>
+            {job.title}
+          </h3>
+
+          {showProgress ? (
+            <div
+              className={`progress-track${percent === null ? ' progress-track--indeterminate' : ''}`}
+              role="progressbar"
+              aria-label={`Download progress for ${job.title}`}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={percent ?? undefined}
+            >
+              <span
+                className="progress-fill"
+                style={percent !== null ? { width: `${percent}%` } : undefined}
+              />
+            </div>
+          ) : null}
+
+          <div className="job-meta">
+            {job.status === 'completed' ? (
+              <span>{jobSize(job)}</span>
+            ) : job.status === 'failed' || job.status === 'cancelled' ? (
+              <span>{jobSize(job)}</span>
+            ) : (
+              <>
+                <span className="job-percent">
+                  {percent === null ? '—' : `${Math.round(percent)}%`}
+                </span>
+                {job.progress.downloadedBytes === null ? (
+                  <span>Starting…</span>
+                ) : (
+                  <span>
+                    {formatBytes(job.progress.downloadedBytes)}
+                    {job.progress.totalBytes !== null
+                      ? ` / ${formatBytes(job.progress.totalBytes)}`
+                      : ' downloaded'}
+                  </span>
+                )}
+                {job.progress.bytesPerSecond !== null ? (
+                  <span>{formatSpeed(job.progress.bytesPerSecond)}</span>
+                ) : null}
+                {job.progress.etaSeconds !== null ? (
+                  <span>ETA {formatEta(job.progress.etaSeconds)}</span>
+                ) : null}
+              </>
+            )}
+            {job.output?.files[0] ? (
+              <span className="job-output" title={job.output.files[0].path}>
+                {job.output.files[0].path.split(/[\\/]/).pop()}
+              </span>
+            ) : null}
+          </div>
+
+          {job.error ? (
+            <p className="job-error" role="alert">
+              {job.error.message}
+              <span className="job-diagnostic"> · {job.error.diagnosticId.slice(0, 8)}</span>
+            </p>
           ) : null}
         </div>
-
-        {job.error ? (
-          <p className="job-error" role="alert">
-            {job.error.message}
-            <span className="job-diagnostic"> · {job.error.diagnosticId.slice(0, 8)}</span>
-          </p>
-        ) : null}
       </div>
 
       <div className="job-actions">
@@ -230,8 +270,8 @@ export function JobList({
   }
 
   const sorted = [...jobs].sort((a, b) => {
-    const aTerminal = isTerminal(a.status)
-    const bTerminal = isTerminal(b.status)
+    const aTerminal = isTerminalStatus(a.status)
+    const bTerminal = isTerminalStatus(b.status)
     if (aTerminal !== bTerminal) return aTerminal ? 1 : -1
     return b.createdAt.localeCompare(a.createdAt)
   })

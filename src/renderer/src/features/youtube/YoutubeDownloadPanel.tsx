@@ -603,7 +603,11 @@ export function YoutubeDownloadPanel({
             onClick={() => void handleCreate()}
             disabled={!canDownload}
           >
-            <Icon name="download" size={19} />
+            {creating ? (
+              <span className="button-spinner" aria-hidden="true" />
+            ) : (
+              <Icon name="download" size={19} />
+            )}
             {creating ? 'Starting…' : downloadButtonLabel}
           </button>
         </div>

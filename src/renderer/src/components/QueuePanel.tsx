@@ -1,6 +1,7 @@
 import type { DownloadJob } from '@shared/domain/job'
 import { Icon } from './Icon'
-import { isTerminal, JobRow } from './JobList'
+import { JobRow } from './JobList'
+import { isTerminalStatus } from '../lib/jobs'
 
 interface QueuePanelProps {
   jobs: DownloadJob[]
@@ -22,10 +23,10 @@ export function QueuePanel({
   onViewHistory,
 }: QueuePanelProps) {
   const activeJobs = jobs
-    .filter((job) => !isTerminal(job.status))
+    .filter((job) => !isTerminalStatus(job.status))
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
   const recentJobs = jobs
-    .filter((job) => isTerminal(job.status))
+    .filter((job) => isTerminalStatus(job.status))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     .slice(0, 4)
 

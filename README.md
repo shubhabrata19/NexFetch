@@ -101,6 +101,20 @@ npm run package      # unpacked application with resources
 npm run package:win  # Windows installer
 ```
 
+## Branding
+
+The master app icon is `resources/assets/nexfetch_icon.png`. Generate the
+platform icon set with:
+
+```bash
+npm run icons
+```
+
+This produces `build/icon.ico`, `build/icon.icns`, `build/icon.png`, and the
+Linux icon sizes under `build/icons`. The renderer uses a 256px copy for the
+sidebar/boot marks. The application theme follows the operating system by
+default, with manual Light and Dark overrides in Settings.
+
 ## Architecture
 
 ```text

@@ -1,5 +1,8 @@
+import type { DownloadJob } from '@shared/domain/job'
 import type { DependencyStatus } from '@shared/ipc/contracts'
+import brandIcon from '../assets/nexfetch-icon.png'
 import { Icon } from './Icon'
+import { SidebarActivity } from './SidebarActivity'
 import { StatusDot } from './StatusDot'
 import type { StatusTone } from './StatusDot'
 
@@ -9,6 +12,7 @@ interface SidebarProps {
   view: View
   version: string
   dependencies: DependencyStatus | null
+  jobs: DownloadJob[]
   onNavigate: (view: View) => void
 }
 
@@ -34,18 +38,21 @@ function systemSummary(dependencies: DependencyStatus | null): {
   return { label: 'Setup needed', tone: 'warning' }
 }
 
-export function Sidebar({ view, version, dependencies, onNavigate }: SidebarProps) {
+export function Sidebar({ view, version, dependencies, jobs, onNavigate }: SidebarProps) {
   const system = systemSummary(dependencies)
 
   return (
     <aside className="sidebar" aria-label="Primary navigation">
       <div className="brand">
         <div className="brand-mark">
-          <Icon name="logo" size={22} />
+          <img src={brandIcon} alt="" />
         </div>
         <div className="brand-copy">
-          <span className="brand-name">NexFetch</span>
-          <span className="brand-tagline">Download manager</span>
+          <span className="brand-name">
+            <span>Nex</span>
+            <span className="brand-name-accent">Fetch</span>
+          </span>
+          <span className="brand-tagline">Universal Download Manager</span>
         </div>
       </div>
 
@@ -68,6 +75,10 @@ export function Sidebar({ view, version, dependencies, onNavigate }: SidebarProp
           )
         })}
       </nav>
+
+      <div className="sidebar-activity-wrap">
+        <SidebarActivity jobs={jobs} onNavigate={() => onNavigate('downloads')} />
+      </div>
 
       <div className="sidebar-footer">
         <button

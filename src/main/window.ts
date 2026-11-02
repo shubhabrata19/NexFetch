@@ -3,6 +3,10 @@ import { join } from 'node:path'
 import type { Logger } from './services/logger'
 
 export function createMainWindow(isDev: boolean, logger: Logger): BrowserWindow {
+  const iconPath = isDev
+    ? join(process.cwd(), 'resources', 'assets', 'nexfetch_icon.png')
+    : join(process.resourcesPath, 'assets', 'nexfetch_icon.png')
+
   const window = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -10,7 +14,8 @@ export function createMainWindow(isDev: boolean, logger: Logger): BrowserWindow 
     minHeight: 640,
     show: false,
     title: 'NexFetch',
-    backgroundColor: nativeTheme.shouldUseDarkColors ? '#0b1015' : '#f5f7fa',
+    icon: iconPath,
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#070405' : '#FFF7F6',
     autoHideMenuBar: process.platform !== 'darwin',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),

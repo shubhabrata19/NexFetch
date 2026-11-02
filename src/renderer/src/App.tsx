@@ -8,8 +8,8 @@ import type {
   SettingsPatch,
   Theme,
 } from '@shared/ipc/contracts'
+import brandIcon from './assets/nexfetch-icon.png'
 import { ErrorPanel } from './components/ErrorPanel'
-import { Icon } from './components/Icon'
 import { Sidebar } from './components/Sidebar'
 import { Toast } from './components/Toast'
 import type { ToastState } from './components/Toast'
@@ -31,7 +31,7 @@ function BootScreen() {
   return (
     <div className="boot-screen">
       <div className="boot-mark">
-        <Icon name="logo" size={30} />
+        <img src={brandIcon} alt="" />
       </div>
       <p className="eyebrow">NexFetch</p>
       <p className="boot-message">Preparing your download workspace…</p>
@@ -290,6 +290,7 @@ export default function App() {
         view={view}
         version={info.version}
         dependencies={dependencies}
+        jobs={jobs}
         onNavigate={setView}
       />
 
