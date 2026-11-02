@@ -38,6 +38,13 @@ function rateInMegabytes(bytesPerSecond: number): string {
   return String(Number.isInteger(megabytes) ? megabytes : Number(megabytes.toFixed(2)))
 }
 
+function rateDraftBytes(value: string): number | null {
+  if (value.trim() === '') return null
+  const megabytes = Number(value)
+  if (!Number.isFinite(megabytes) || megabytes <= 0) return null
+  return Math.min(1_000_000_000, Math.round(megabytes * 1024 * 1024))
+}
+
 export function SettingsPage({
   settings,
   appInfo,
@@ -50,12 +57,21 @@ export function SettingsPage({
 }: SettingsPageProps) {
   const [saving, setSaving] = useState(false)
   const [customRateRequested, setCustomRateRequested] = useState(false)
+  const [customRateDraft, setCustomRateDraft] = useState<string | null>(null)
 
   const matchedRateOption = RATE_OPTIONS.find(
     (option) => option.value === settings.maxDownloadRateBytesPerSecond,
   )
   const rateSelectValue = matchedRateOption ? String(matchedRateOption.value) : 'custom'
   const showCustomRate = customRateRequested || rateSelectValue === 'custom'
+  const savedCustomRate = rateInMegabytes(settings.maxDownloadRateBytesPerSecond)
+  const customRateValue = customRateDraft ?? savedCustomRate
+  const customRateBytes = rateDraftBytes(customRateValue)
+  const customRateDirty =
+    showCustomRate &&
+    (customRateBytes === null
+      ? customRateValue !== savedCustomRate
+      : customRateBytes !== settings.maxDownloadRateBytesPerSecond)
 
   const applyPatch = async (patch: SettingsPatch): Promise<void> => {
     setSaving(true)
@@ -181,9 +197,11 @@ export function SettingsPage({
                   const value = event.target.value
                   if (value === 'custom') {
                     setCustomRateRequested(true)
+                    setCustomRateDraft(null)
                     return
                   }
                   setCustomRateRequested(false)
+                  setCustomRateDraft(null)
                   void applyPatch({ maxDownloadRateBytesPerSecond: Number(value) })
                 }}
               >
@@ -200,39 +218,37 @@ export function SettingsPage({
                   className="rate-custom"
                   onSubmit={(event) => {
                     event.preventDefault()
-                    const data = new FormData(event.currentTarget)
-                    const megabytes = Number(data.get('custom-rate'))
-                    if (!Number.isFinite(megabytes) || megabytes <= 0) return
-                    setCustomRateRequested(false)
-                    void applyPatch({
-                      maxDownloadRateBytesPerSecond: Math.min(
-                        1_000_000_000,
-                        Math.round(megabytes * 1024 * 1024),
-                      ),
-                    })
+                    const bytes = rateDraftBytes(customRateValue)
+                    if (bytes === null) return
+                    const matchesPreset = RATE_OPTIONS.some((option) => option.value === bytes)
+                    setCustomRateRequested(!matchesPreset)
+                    setCustomRateDraft(matchesPreset ? null : rateInMegabytes(bytes))
+                    void applyPatch({ maxDownloadRateBytesPerSecond: bytes })
                   }}
                 >
                   <input
-                    key={settings.maxDownloadRateBytesPerSecond}
                     className="rate-input"
                     name="custom-rate"
                     type="number"
                     min="0.01"
                     max="953.67"
                     step="0.01"
-                    defaultValue={rateInMegabytes(settings.maxDownloadRateBytesPerSecond)}
+                    value={customRateValue}
+                    onChange={(event) => setCustomRateDraft(event.target.value)}
                     placeholder="1"
                     aria-label="Custom maximum download speed in megabytes per second"
                     required
                   />
                   <span className="rate-unit">MB/s</span>
-                  <button
-                    type="submit"
-                    className="button button--secondary button--small"
-                    disabled={saving}
-                  >
-                    Apply
-                  </button>
+                  {customRateDirty ? (
+                    <button
+                      type="submit"
+                      className="button button--secondary button--small"
+                      disabled={saving}
+                    >
+                      Apply
+                    </button>
+                  ) : null}
                 </form>
               ) : null}
             </div>
