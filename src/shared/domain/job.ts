@@ -41,6 +41,7 @@ export interface YoutubeJobDetails {
   engineId: 'youtube'
   videoId: string
   channel: string | null
+  thumbnailUrl?: string | null
   selectedVideo: FormatSummary | null
   selectedAudio: FormatSummary | null
   container: string | null

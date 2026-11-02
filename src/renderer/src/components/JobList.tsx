@@ -1,5 +1,8 @@
+import { useEffect, useRef, useState } from 'react'
 import type { DownloadJob, JobStatus } from '@shared/domain/job'
 import { Icon } from './Icon'
+import type { IconName } from './Icon'
+import { isTerminalStatus } from '../lib/jobs'
 import { formatBytes, formatEta, formatSpeed } from '../lib/format'
 
 interface JobListProps {
@@ -27,10 +30,6 @@ const STATUS_LABELS: Record<JobStatus, string> = {
   cancelled: 'Cancelled',
 }
 
-function isTerminal(status: JobStatus): boolean {
-  return status === 'completed' || status === 'failed' || status === 'cancelled'
-}
-
 function statusTone(status: JobStatus): string {
   if (status === 'completed') return 'badge--success'
   if (status === 'failed') return 'badge--danger'
@@ -53,151 +52,403 @@ function jobDetailLine(job: DownloadJob): string | null {
   return parts.length > 0 ? parts.join(' · ') : null
 }
 
-function jobSize(job: DownloadJob): string {
+function jobSize(job: DownloadJob): string | null {
   if (job.output?.files[0]?.bytes != null) return formatBytes(job.output.files[0].bytes)
   if (job.progress.totalBytes !== null) return formatBytes(job.progress.totalBytes)
-  return 'Size unknown'
+  return null
 }
 
-function JobRow({
+function IconButton({
+  icon,
+  label,
+  onClick,
+  disabled = false,
+  tone = 'neutral',
+}: {
+  icon: IconName
+  label: string
+  onClick: () => void
+  disabled?: boolean
+  tone?: 'neutral' | 'stop' | 'danger' | 'confirm'
+}) {
+  return (
+    <button
+      type="button"
+      className={`icon-button icon-button--${tone}`}
+      onClick={onClick}
+      disabled={disabled}
+      title={label}
+      aria-label={label}
+    >
+      <Icon name={icon} size={15} />
+    </button>
+  )
+}
+
+function JobActions({
   job,
+  compact,
+  confirmingClear,
+  onCancel,
+  onRetry,
+  onOpenLocation,
+  onClear,
+  onConfirmClear,
+  onCancelClear,
+}: {
+  job: DownloadJob
+  compact: boolean
+  confirmingClear: boolean
+  onCancel: (jobId: string) => void
+  onRetry: (jobId: string) => void
+  onOpenLocation: (jobId: string, revealFile: boolean) => void
+  onClear: () => void
+  onConfirmClear: () => void
+  onCancelClear: () => void
+}) {
+  const terminal = isTerminalStatus(job.status)
+
+  if (confirmingClear) {
+    return (
+      <div className="job-actions">
+        <IconButton
+          icon="check"
+          label="Confirm clear from history"
+          onClick={onConfirmClear}
+          tone="confirm"
+        />
+        <IconButton icon="x" label="Keep download in history" onClick={onCancelClear} />
+      </div>
+    )
+  }
+
+  return (
+    <div className="job-actions">
+      {!terminal ? (
+        <IconButton
+          icon="stop"
+          label={job.status === 'cancelling' ? 'Stopping download' : `Stop ${job.title}`}
+          onClick={() => onCancel(job.id)}
+          disabled={job.status === 'cancelling'}
+          tone="stop"
+        />
+      ) : null}
+
+      {job.status === 'failed' || job.status === 'cancelled' ? (
+        <IconButton icon="refresh" label={`Restart ${job.title}`} onClick={() => onRetry(job.id)} />
+      ) : null}
+
+      {job.status === 'completed' && job.output ? (
+        <>
+          <IconButton
+            icon="folder"
+            label="Open download folder"
+            onClick={() => onOpenLocation(job.id, false)}
+          />
+          {!compact && job.output.files[0] ? (
+            <IconButton
+              icon="file"
+              label="Show downloaded file"
+              onClick={() => onOpenLocation(job.id, true)}
+            />
+          ) : null}
+        </>
+      ) : null}
+
+      {terminal ? (
+        <IconButton
+          icon="x"
+          label={job.status === 'completed' ? 'Clear from history' : 'Clear from list'}
+          onClick={onClear}
+          tone="danger"
+        />
+      ) : null}
+    </div>
+  )
+}
+
+function CompactJobDetails({ job }: { job: DownloadJob }) {
+  const percent = job.progress.percent
+  const terminal = isTerminalStatus(job.status)
+  const size = jobSize(job)
+  const state = (
+    <span className={`job-state job-state--${job.status}`}>
+      <span className="job-state-dot" aria-hidden="true" />
+      {STATUS_LABELS[job.status]}
+    </span>
+  )
+
+  if (terminal) {
+    return (
+      <div className="job-meta job-meta--compact">
+        {state}
+        {size ? <span className="job-size">{size}</span> : null}
+      </div>
+    )
+  }
+
+  if (job.status === 'queued') {
+    return (
+      <div className="job-meta job-meta--compact">
+        {state}
+        <span className="job-size">Waiting for a slot</span>
+      </div>
+    )
+  }
+
+  if (job.status === 'resolving') {
+    return (
+      <div className="job-meta job-meta--compact">
+        {state}
+        <span className="job-size">Reading video info</span>
+      </div>
+    )
+  }
+
+  if (job.status === 'cancelling') {
+    return (
+      <div className="job-meta job-meta--compact">
+        {state}
+        <span className="job-size">Stopping…</span>
+      </div>
+    )
+  }
+
+  const sizeLabel =
+    job.progress.downloadedBytes === null
+      ? null
+      : job.progress.totalBytes !== null
+        ? `${formatBytes(job.progress.downloadedBytes)} / ${formatBytes(job.progress.totalBytes)}`
+        : formatBytes(job.progress.downloadedBytes)
+
+  return (
+    <div className="job-progress-block">
+      <div className="job-progress-head">
+        {state}
+        <span className="job-percent">{percent === null ? '—' : `${Math.round(percent)}%`}</span>
+        {job.progress.bytesPerSecond !== null ? (
+          <span className="job-speed">{formatSpeed(job.progress.bytesPerSecond)}</span>
+        ) : null}
+      </div>
+
+      <div
+        className={`progress-track${percent === null ? ' progress-track--indeterminate' : ''}`}
+        role="progressbar"
+        aria-label={`Download progress for ${job.title}`}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={percent ?? undefined}
+      >
+        <span
+          className="progress-fill"
+          style={percent !== null ? { width: `${percent}%` } : undefined}
+        />
+      </div>
+
+      <div className="job-progress-foot">
+        <span className="job-size">{sizeLabel ?? 'Starting…'}</span>
+        {job.progress.etaSeconds !== null ? (
+          <span className="job-eta">ETA {formatEta(job.progress.etaSeconds)}</span>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
+export function JobRow({
+  job,
+  compact = false,
   onCancel,
   onRetry,
   onRemove,
   onOpenLocation,
 }: {
   job: DownloadJob
+  compact?: boolean
   onCancel: (jobId: string) => void
   onRetry: (jobId: string) => void
   onRemove: (jobId: string) => void
   onOpenLocation: (jobId: string, revealFile: boolean) => void
 }) {
-  const terminal = isTerminal(job.status)
   const detail = jobDetailLine(job)
   const percent = job.progress.percent
   const showProgress = isProgressStatus(job.status)
+  const size = jobSize(job)
+  const terminal = isTerminalStatus(job.status)
+  const [completionFlash, setCompletionFlash] = useState(false)
+  const [confirmingClear, setConfirmingClear] = useState(false)
+  const [removing, setRemoving] = useState(false)
+  const previousStatus = useRef(job.status)
 
-  const handleRemove = (): void => {
-    if (
-      window.confirm(`Remove "${job.title}" from history? Downloaded files will not be deleted.`)
-    ) {
-      onRemove(job.id)
+  useEffect(() => {
+    const previous = previousStatus.current
+    previousStatus.current = job.status
+    if (job.status !== 'completed' || previous === 'completed') return
+
+    setCompletionFlash(true)
+    const timer = window.setTimeout(() => setCompletionFlash(false), 900)
+    return () => window.clearTimeout(timer)
+  }, [job.status])
+
+  useEffect(() => {
+    if (!removing) return
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const delay = reducedMotion ? 0 : 220
+    const removeTimer = window.setTimeout(() => onRemove(job.id), delay)
+    const restoreTimer = window.setTimeout(() => setRemoving(false), delay + 1200)
+    return () => {
+      window.clearTimeout(removeTimer)
+      window.clearTimeout(restoreTimer)
     }
+  }, [job.id, onRemove, removing])
+
+  const beginRemove = (): void => {
+    setConfirmingClear(false)
+    setRemoving(true)
+  }
+
+  const beginClear = (): void => {
+    if (job.status === 'completed') {
+      setConfirmingClear(true)
+      return
+    }
+    beginRemove()
   }
 
   return (
-    <article className="job-row" aria-label={`${job.title}, ${STATUS_LABELS[job.status]}`}>
-      <div className="job-main">
-        <div className="job-title-line">
-          <span className={`badge job-status ${statusTone(job.status)}`}>
-            {STATUS_LABELS[job.status]}
-          </span>
-          <span className="job-engine">YouTube</span>
-          {detail ? <span className="job-detail">{detail}</span> : null}
-        </div>
-        <h3 className="job-title" title={job.title}>
-          {job.title}
-        </h3>
-
-        {showProgress ? (
-          <div
-            className={`progress-track${percent === null ? ' progress-track--indeterminate' : ''}`}
-            role="progressbar"
-            aria-label={`Download progress for ${job.title}`}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={percent ?? undefined}
-          >
-            <span
-              className="progress-fill"
-              style={percent !== null ? { width: `${percent}%` } : undefined}
+    <article
+      className={`job-row job-row--${job.status}${compact ? ' job-row--compact' : ''}${
+        compact && terminal ? ' job-row--compact-terminal' : ''
+      }${completionFlash ? ' job-row--just-completed' : ''}${removing ? ' job-row--removing' : ''}`}
+      aria-label={`${job.title}, ${STATUS_LABELS[job.status]}`}
+    >
+      <div className="job-row-content">
+        <div className="job-thumb">
+          {job.details?.engineId === 'youtube' && job.details.thumbnailUrl ? (
+            <img
+              src={job.details.thumbnailUrl}
+              alt=""
+              loading="lazy"
+              referrerPolicy="no-referrer"
             />
-          </div>
-        ) : null}
+          ) : (
+            <Icon name="download" size={compact ? 15 : 20} />
+          )}
+        </div>
+        <div className="job-main">
+          {!compact ? (
+            <div className="job-title-line">
+              <span className={`badge job-status ${statusTone(job.status)}`}>
+                {STATUS_LABELS[job.status]}
+              </span>
+              <span className="job-engine">YouTube</span>
+              {detail ? <span className="job-detail">{detail}</span> : null}
+            </div>
+          ) : null}
+          <h3 className="job-title" title={job.title}>
+            {job.title}
+          </h3>
 
-        <div className="job-meta">
-          {job.status === 'completed' ? (
-            <span>{jobSize(job)}</span>
-          ) : job.status === 'failed' || job.status === 'cancelled' ? (
-            <span>{jobSize(job)}</span>
+          {compact ? (
+            <CompactJobDetails job={job} />
           ) : (
             <>
-              <span>
-                {formatBytes(job.progress.downloadedBytes)} / {formatBytes(job.progress.totalBytes)}
-              </span>
-              <span>{formatSpeed(job.progress.bytesPerSecond)}</span>
-              <span>ETA {formatEta(job.progress.etaSeconds)}</span>
+              {showProgress ? (
+                <div
+                  className={`progress-track${percent === null ? ' progress-track--indeterminate' : ''}`}
+                  role="progressbar"
+                  aria-label={`Download progress for ${job.title}`}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={percent ?? undefined}
+                >
+                  <span
+                    className="progress-fill"
+                    style={percent !== null ? { width: `${percent}%` } : undefined}
+                  />
+                </div>
+              ) : null}
+
+              <div className="job-meta">
+                {terminal ? (
+                  size ? (
+                    <span>{size}</span>
+                  ) : null
+                ) : job.status === 'queued' ? (
+                  <span>Waiting for a slot</span>
+                ) : job.status === 'resolving' ? (
+                  <span>Reading video info</span>
+                ) : job.status === 'cancelling' ? (
+                  <span>Stopping…</span>
+                ) : (
+                  <>
+                    <span className="job-percent">
+                      {percent === null ? '—' : `${Math.round(percent)}%`}
+                    </span>
+                    {job.progress.downloadedBytes === null ? (
+                      <span>Starting…</span>
+                    ) : (
+                      <span>
+                        {formatBytes(job.progress.downloadedBytes)}
+                        {job.progress.totalBytes !== null
+                          ? ` / ${formatBytes(job.progress.totalBytes)}`
+                          : ' downloaded'}
+                      </span>
+                    )}
+                    {job.progress.bytesPerSecond !== null ? (
+                      <span>{formatSpeed(job.progress.bytesPerSecond)}</span>
+                    ) : null}
+                    {job.progress.etaSeconds !== null ? (
+                      <span className="job-eta">ETA {formatEta(job.progress.etaSeconds)}</span>
+                    ) : null}
+                  </>
+                )}
+
+                {job.output?.files[0] ? (
+                  <span className="job-output" title={job.output.files[0].path}>
+                    {job.output.files[0].path.split(/[\\/]/).pop()}
+                  </span>
+                ) : null}
+              </div>
             </>
           )}
-          {job.output?.files[0] ? (
-            <span className="job-output" title={job.output.files[0].path}>
-              {job.output.files[0].path.split(/[\\/]/).pop()}
-            </span>
+
+          {job.status === 'completed' ? (
+            <div
+              className={`job-clear-confirm${confirmingClear ? ' job-clear-confirm--open' : ''}`}
+              aria-hidden={confirmingClear ? undefined : true}
+              role={confirmingClear ? 'alert' : undefined}
+            >
+              <div className="job-clear-confirm-inner">
+                <Icon name="alert" size={13} />
+                <span>
+                  Remove from history?{' '}
+                  <span className="job-clear-confirm-note">The file stays on disk.</span>
+                </span>
+              </div>
+            </div>
+          ) : null}
+
+          {job.error ? (
+            <p className="job-error" role="alert">
+              {job.error.message}
+              <span className="job-diagnostic"> · {job.error.diagnosticId.slice(0, 8)}</span>
+            </p>
           ) : null}
         </div>
-
-        {job.error ? (
-          <p className="job-error" role="alert">
-            {job.error.message}
-            <span className="job-diagnostic"> · {job.error.diagnosticId.slice(0, 8)}</span>
-          </p>
-        ) : null}
       </div>
 
-      <div className="job-actions">
-        {!terminal && job.status !== 'cancelling' ? (
-          <button
-            type="button"
-            className="button button--secondary button--small"
-            onClick={() => onCancel(job.id)}
-          >
-            Cancel
-          </button>
-        ) : null}
-
-        {job.status === 'failed' || job.status === 'cancelled' ? (
-          <button
-            type="button"
-            className="button button--secondary button--small"
-            onClick={() => onRetry(job.id)}
-          >
-            <Icon name="refresh" size={15} />
-            Retry
-          </button>
-        ) : null}
-
-        {job.status === 'completed' && job.output ? (
-          <>
-            <button
-              type="button"
-              className="button button--secondary button--small"
-              onClick={() => onOpenLocation(job.id, false)}
-            >
-              <Icon name="folder" size={15} />
-              Open folder
-            </button>
-            {job.output.files[0] ? (
-              <button
-                type="button"
-                className="button button--ghost button--small"
-                onClick={() => onOpenLocation(job.id, true)}
-              >
-                Show file
-              </button>
-            ) : null}
-          </>
-        ) : null}
-
-        {terminal ? (
-          <button
-            type="button"
-            className="button button--ghost button--small job-remove"
-            onClick={handleRemove}
-          >
-            Remove
-          </button>
-        ) : null}
-      </div>
+      <JobActions
+        job={job}
+        compact={compact}
+        confirmingClear={confirmingClear}
+        onCancel={onCancel}
+        onRetry={onRetry}
+        onOpenLocation={onOpenLocation}
+        onClear={beginClear}
+        onConfirmClear={beginRemove}
+        onCancelClear={() => setConfirmingClear(false)}
+      />
     </article>
   )
 }
@@ -225,8 +476,8 @@ export function JobList({
   }
 
   const sorted = [...jobs].sort((a, b) => {
-    const aTerminal = isTerminal(a.status)
-    const bTerminal = isTerminal(b.status)
+    const aTerminal = isTerminalStatus(a.status)
+    const bTerminal = isTerminalStatus(b.status)
     if (aTerminal !== bTerminal) return aTerminal ? 1 : -1
     return b.createdAt.localeCompare(a.createdAt)
   })

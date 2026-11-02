@@ -10,6 +10,8 @@ This repository currently contains the **YouTube MVP foundation**:
 - YouTube URL validation, metadata preview, and actual format discovery.
 - Quality-first 4K selection and format list.
 - Real download queue with progress, cancellation, retry, completion, and history.
+- Polished desktop UI with a persistent activity queue, sidebar download controls,
+  system-aware light/dark themes, and motion that respects reduced-motion settings.
 - ffprobe verification of the merged output.
 - Bundled yt-dlp/FFmpeg binary detection for packaged builds.
 
@@ -26,12 +28,23 @@ those engines exist.
 - Actual format mapping up to 2160p; 8K is never offered.
 - “Best available up to 4K,” manual video selection, and audio-only selection.
 - Separate video/audio merging through yt-dlp and FFmpeg.
-- Progress, speed, ETA, cancellation, retry, output finalization, and conflict-safe
-  filenames.
+- Progress, speed, size, ETA, cancellation, retry, output finalization, and
+  conflict-safe filenames.
 - ffprobe verification of resolution and audio presence before a job is marked
   complete.
 - Persistent job history and settings in local JSON stores behind repository
   interfaces. SQLite migration is planned for the universal-manager phase.
+- Persistent right-side activity queue with compact progress cards for active,
+  queued, and recent downloads.
+- Sidebar active-download module with per-job stop controls and queue navigation.
+- Inline clear confirmation with icon actions and animated card removal. Clearing
+  history never deletes downloaded output files.
+- Red, black, and burgundy brand system with system, light, and dark appearance
+  modes. The sidebar includes a quick light/dark toggle; Settings remains the
+  source for the three-way System/Light/Dark preference.
+- Keyboard-accessible icon controls, visible focus states, reduced-motion support,
+  responsive sidebar collapse, and visually hidden scrollbars that preserve wheel
+  and keyboard scrolling.
 - Structured local JSON logging with redaction and rotation.
 - Windows packaging with bundled runtime binaries.
 
@@ -96,10 +109,67 @@ npm run check        # typecheck + lint + tests
 npm run typecheck
 npm run lint
 npm run test
+npm run format       # format the repository
+npm run format:check # verify formatting
 npm run build        # production build into out/
 npm run package      # unpacked application with resources
 npm run package:win  # Windows installer
+npm run icons        # regenerate platform icons
 ```
+
+## Release build
+
+The current Windows review build is produced with:
+
+```bash
+npx electron-builder --win nsis -c.directories.output=release/final
+```
+
+Outputs:
+
+```text
+release/final/NexFetch Setup 0.2.0.exe
+release/final/win-unpacked/NexFetch.exe
+```
+
+The installer is currently unsigned, so Windows SmartScreen may warn. The
+packaged application includes the runtime binaries from `resources/bin` and the
+brand asset from `resources/assets`.
+
+## Interface
+
+- The main downloads workspace keeps the YouTube URL flow, preview, format
+  chooser, pinned download action, and activity queue visible together.
+- The activity rail shows compact cards with a two-line title, status, percent,
+  speed, downloaded/total size, ETA, and progress bar. Actions use icon buttons
+  for stop, restart, open folder, and clear.
+- The sidebar shows up to two active downloads with thumbnails, progress, speed,
+  and stop controls. When idle it collapses to a single “No active downloads”
+  line.
+- Clearing a completed job shows an inline warning inside the card, then uses
+  check/cancel icon actions. Confirming fades the card out before removing the
+  history entry. Downloaded files remain on disk.
+- The theme follows the operating system by default. The sidebar footer toggles
+  between explicit light and dark themes; Settings still offers System, Light,
+  and Dark directly.
+- Scrollbars are visually hidden in the main page, queue rail, and download panel
+  while scrolling remains available.
+
+## Branding
+
+The master app icon is `resources/assets/nexfetch_icon.png`. Generate the
+platform icon set with:
+
+```bash
+npm run icons
+```
+
+This produces `build/icon.ico`, `build/icon.icns`, `build/icon.png`, and the
+Linux icon sizes under `build/icons`. The renderer uses a 256px copy for the
+sidebar/boot marks. The visual identity uses red and burgundy accents on black
+surfaces in dark mode and on white surfaces in light mode. The application
+follows the operating system by default; the sidebar toggle switches to an
+explicit light or dark preference, and Settings offers System, Light, and Dark.
 
 ## Architecture
 

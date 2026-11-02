@@ -12,9 +12,14 @@ extraResources:
     to: bin
     filter:
       - '**/*'
+  - from: resources/assets
+    to: assets
+    filter:
+      - nexfetch_icon.png
 asar: true
 npmRebuild: false
 win:
+  icon: build/icon.ico
   target:
     - target: nsis
       arch:
@@ -26,6 +31,7 @@ nsis:
   createDesktopShortcut: true
   createStartMenuShortcut: true
 mac:
+  icon: build/icon.icns
   category: public.app-category.utilities
   target:
     - target: dmg
@@ -33,6 +39,7 @@ mac:
         - arm64
         - x64
 linux:
+  icon: build/icons
   category: Network
   target:
     - target: AppImage

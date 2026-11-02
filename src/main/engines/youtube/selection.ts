@@ -94,6 +94,7 @@ function buildSelection(
     engineId: 'youtube',
     videoId: preview.video.id,
     channel: preview.video.channel,
+    thumbnailUrl: preview.video.thumbnailUrl,
     selectedVideo: video ? summary(video) : null,
     selectedAudio: audio ? summary(audio) : null,
     container,

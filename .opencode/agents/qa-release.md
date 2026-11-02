@@ -16,6 +16,13 @@ Use the `desktop-quality-release` and `universal-download-manager` skills. Inspe
 - Missing/outdated `yt-dlp` and missing FFmpeg.
 - Queue lifecycle, progress, cancellation, retry, process failure, and partial-output cleanup.
 
+## Desktop UI regression tests
+- Verify System follows the OS theme, the sidebar toggle switches between explicit light/dark, and Settings remains in sync.
+- Verify queue cards expose two-line titles, status, percent, speed, downloaded/total size, ETA, and progress without clipping at practical rail widths.
+- Verify unknown sizes are blank and summaries do not contain dangling separators.
+- Verify inline clear confirmation, confirm/cancel icon actions, animated removal, and preservation of downloaded files. No native confirmation dialog should appear.
+- Verify sidebar idle and active states, stop controls, hidden scrollbars with working scrolling, keyboard focus, and reduced-motion behavior.
+
 ## Shared architecture tests
 - Engine registry selection is deterministic and rejects unsupported sources.
 - Fake engines can be registered without coupling tests to Electron or live network calls.
