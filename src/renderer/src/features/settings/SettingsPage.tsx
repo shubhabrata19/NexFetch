@@ -110,6 +110,32 @@ export function SettingsPage({
               ))}
             </select>
           </div>
+
+          <div className="setting-row">
+            <div className="setting-label">
+              <label className="setting-name" htmlFor="setting-fragments">
+                Parallel connections
+              </label>
+              <p>
+                Fragmented video streams can use this many connections. Higher values may speed up
+                large videos but can trigger server throttling.
+              </p>
+            </div>
+            <select
+              id="setting-fragments"
+              className="select"
+              value={settings.concurrentFragments}
+              onChange={(event) =>
+                void applyPatch({ concurrentFragments: Number(event.target.value) })
+              }
+            >
+              {[1, 2, 3, 4, 6, 8, 12, 16].map((value) => (
+                <option key={value} value={value}>
+                  {value} {value === 1 ? 'connection' : 'connections'}
+                </option>
+              ))}
+            </select>
+          </div>
         </section>
 
         <section className="card settings-card" aria-labelledby="settings-appearance-title">

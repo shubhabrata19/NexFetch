@@ -19,6 +19,7 @@ export class SettingsService {
     this.fallback = {
       downloadDirectory: options.defaultDownloadDirectory,
       maxConcurrentDownloads: 2,
+      concurrentFragments: 4,
       theme: 'system',
     }
     this.current = this.load()
@@ -51,7 +52,9 @@ export class SettingsService {
         return this.fallback
       }
 
-      const parsed = settingsSchema.safeParse(stored)
+      // Merge defaults first so a settings file written by an older version
+      // gains newly added fields instead of being treated as corrupt.
+      const parsed = settingsSchema.safeParse({ ...this.fallback, ...stored })
       if (parsed.success) return parsed.data
 
       this.preserveCorruptFile()

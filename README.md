@@ -28,6 +28,8 @@ those engines exist.
 - Actual format mapping up to 2160p; 8K is never offered.
 - “Best available up to 4K,” manual video selection, and audio-only selection.
 - Separate video/audio merging through yt-dlp and FFmpeg.
+- Configurable parallel fragment connections for adaptive-stream downloads,
+  with a conservative default and a per-download control in Settings.
 - Progress, speed, size, ETA, cancellation, retry, output finalization, and
   conflict-safe filenames.
 - ffprobe verification of resolution and audio presence before a job is marked

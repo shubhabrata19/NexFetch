@@ -42,6 +42,7 @@ const CAPABILITIES: EngineCapabilities = {
   liveSpeed: true,
   eta: true,
   peerStats: false,
+  parallelFragmentDownloads: true,
 }
 
 function finiteNumber(value: unknown): number | null {
@@ -260,6 +261,8 @@ export class YoutubeEngine implements DownloadEngine {
       '--print',
       'after_move:NXF_FILE %(filepath)j',
       '--no-colors',
+      '--concurrent-fragments',
+      String(ctx.concurrentFragments),
       '-f',
       selection.selector,
       '--no-overwrites',

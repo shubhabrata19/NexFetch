@@ -16,6 +16,7 @@ export type Theme = 'system' | 'light' | 'dark'
 export interface Settings {
   downloadDirectory: string
   maxConcurrentDownloads: number
+  concurrentFragments: number
   theme: Theme
 }
 

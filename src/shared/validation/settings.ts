@@ -6,6 +6,7 @@ export const settingsSchema = z
   .object({
     downloadDirectory: z.string().min(1).max(4096),
     maxConcurrentDownloads: z.number().int().min(1).max(5),
+    concurrentFragments: z.number().int().min(1).max(16),
     theme: themeSchema,
   })
   .strict()

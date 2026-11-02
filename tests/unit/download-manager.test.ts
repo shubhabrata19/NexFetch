@@ -38,6 +38,7 @@ const capabilities: EngineCapabilities = {
   liveSpeed: true,
   eta: true,
   peerStats: false,
+  parallelFragmentDownloads: false,
 }
 
 const temporaryDirectories: string[] = []

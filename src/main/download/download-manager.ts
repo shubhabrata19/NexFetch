@@ -316,6 +316,7 @@ export class DownloadManager {
         selection: job.selection,
         workspaceDir: workspace,
         resume: job.attempt > 1,
+        concurrentFragments: this.options.settings.get().concurrentFragments,
         signal: runtime.controller.signal,
         logger: this.options.logger,
         dependencies: this.options.dependencies,

@@ -17,6 +17,7 @@ export interface EngineCapabilities {
   liveSpeed: boolean
   eta: boolean
   peerStats: boolean
+  parallelFragmentDownloads: boolean
 }
 
 export interface EngineLogger {
@@ -40,6 +41,7 @@ export interface EngineRunContext extends EngineContext {
   selection: EngineSelection
   workspaceDir: string
   resume: boolean
+  concurrentFragments: number
   emit(event: EngineEvent): void
 }
 

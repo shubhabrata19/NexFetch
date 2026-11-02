@@ -30,6 +30,7 @@ const capabilities: EngineCapabilities = {
   liveSpeed: true,
   eta: true,
   peerStats: false,
+  parallelFragmentDownloads: false,
 }
 
 function fakeEngine(id: string, match: (input: SourceInput) => EngineMatch | null): DownloadEngine {
