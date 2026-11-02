@@ -2471,6 +2471,16 @@ button:disabled {
   border-color: color-mix(in srgb, var(--danger) 28%, transparent);
 }
 
+.icon-button--confirm {
+  color: var(--success);
+}
+
+.icon-button--confirm:hover:not(:disabled) {
+  color: var(--success);
+  background: var(--success-soft);
+  border-color: color-mix(in srgb, var(--success) 28%, transparent);
+}
+
 .job-empty {
   display: flex;
   flex-direction: column;
@@ -2650,6 +2660,64 @@ button:disabled {
   width: 26px;
   height: 26px;
   border-radius: 6px;
+}
+
+.job-clear-confirm {
+  display: grid;
+  grid-template-rows: 0fr;
+  margin-top: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition:
+    grid-template-rows var(--motion-base) var(--ease-standard),
+    margin-top var(--motion-base) var(--ease-standard),
+    opacity var(--motion-fast) var(--ease-standard);
+}
+
+.job-clear-confirm--open {
+  grid-template-rows: 1fr;
+  margin-top: 8px;
+  opacity: 1;
+}
+
+.job-clear-confirm-inner {
+  display: flex;
+  align-items: flex-start;
+  min-height: 0;
+  gap: 6px;
+  padding: 7px 8px;
+  overflow: hidden;
+  color: var(--warning);
+  font-size: 10.5px;
+  line-height: 1.4;
+  background: var(--warning-soft);
+  border: 1px solid color-mix(in srgb, var(--warning) 28%, transparent);
+  border-radius: 7px;
+}
+
+.job-clear-confirm-inner svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.job-clear-confirm-note {
+  color: var(--muted);
+}
+
+.job-row--removing {
+  pointer-events: none;
+  animation: queue-card-out 220ms var(--ease-standard) forwards;
+}
+
+@keyframes queue-card-out {
+  from {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(12px) scale(0.985);
+  }
 }
 
 .job-row--compact .job-error {

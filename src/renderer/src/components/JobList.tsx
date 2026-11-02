@@ -69,7 +69,7 @@ function IconButton({
   label: string
   onClick: () => void
   disabled?: boolean
-  tone?: 'neutral' | 'stop' | 'danger'
+  tone?: 'neutral' | 'stop' | 'danger' | 'confirm'
 }) {
   return (
     <button
@@ -88,28 +88,38 @@ function IconButton({
 function JobActions({
   job,
   compact,
+  confirmingClear,
   onCancel,
   onRetry,
-  onRemove,
   onOpenLocation,
+  onClear,
+  onConfirmClear,
+  onCancelClear,
 }: {
   job: DownloadJob
   compact: boolean
+  confirmingClear: boolean
   onCancel: (jobId: string) => void
   onRetry: (jobId: string) => void
-  onRemove: (jobId: string) => void
   onOpenLocation: (jobId: string, revealFile: boolean) => void
+  onClear: () => void
+  onConfirmClear: () => void
+  onCancelClear: () => void
 }) {
   const terminal = isTerminalStatus(job.status)
 
-  const handleClear = (): void => {
-    if (job.status === 'completed') {
-      const confirmed = window.confirm(
-        `Clear "${job.title}" from history? The downloaded file will stay on disk.`,
-      )
-      if (!confirmed) return
-    }
-    onRemove(job.id)
+  if (confirmingClear) {
+    return (
+      <div className="job-actions">
+        <IconButton
+          icon="check"
+          label="Confirm clear from history"
+          onClick={onConfirmClear}
+          tone="confirm"
+        />
+        <IconButton icon="x" label="Keep download in history" onClick={onCancelClear} />
+      </div>
+    )
   }
 
   return (
@@ -149,7 +159,7 @@ function JobActions({
         <IconButton
           icon="x"
           label={job.status === 'completed' ? 'Clear from history' : 'Clear from list'}
-          onClick={handleClear}
+          onClick={onClear}
           tone="danger"
         />
       ) : null}
@@ -266,6 +276,8 @@ export function JobRow({
   const size = jobSize(job)
   const terminal = isTerminalStatus(job.status)
   const [completionFlash, setCompletionFlash] = useState(false)
+  const [confirmingClear, setConfirmingClear] = useState(false)
+  const [removing, setRemoving] = useState(false)
   const previousStatus = useRef(job.status)
 
   useEffect(() => {
@@ -278,11 +290,36 @@ export function JobRow({
     return () => window.clearTimeout(timer)
   }, [job.status])
 
+  useEffect(() => {
+    if (!removing) return
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const delay = reducedMotion ? 0 : 220
+    const removeTimer = window.setTimeout(() => onRemove(job.id), delay)
+    const restoreTimer = window.setTimeout(() => setRemoving(false), delay + 1200)
+    return () => {
+      window.clearTimeout(removeTimer)
+      window.clearTimeout(restoreTimer)
+    }
+  }, [job.id, onRemove, removing])
+
+  const beginRemove = (): void => {
+    setConfirmingClear(false)
+    setRemoving(true)
+  }
+
+  const beginClear = (): void => {
+    if (job.status === 'completed') {
+      setConfirmingClear(true)
+      return
+    }
+    beginRemove()
+  }
+
   return (
     <article
       className={`job-row job-row--${job.status}${compact ? ' job-row--compact' : ''}${
         compact && terminal ? ' job-row--compact-terminal' : ''
-      }${completionFlash ? ' job-row--just-completed' : ''}`}
+      }${completionFlash ? ' job-row--just-completed' : ''}${removing ? ' job-row--removing' : ''}`}
       aria-label={`${job.title}, ${STATUS_LABELS[job.status]}`}
     >
       <div className="job-row-content">
@@ -376,6 +413,22 @@ export function JobRow({
             </>
           )}
 
+          {job.status === 'completed' ? (
+            <div
+              className={`job-clear-confirm${confirmingClear ? ' job-clear-confirm--open' : ''}`}
+              aria-hidden={confirmingClear ? undefined : true}
+              role={confirmingClear ? 'alert' : undefined}
+            >
+              <div className="job-clear-confirm-inner">
+                <Icon name="alert" size={13} />
+                <span>
+                  Remove from history?{' '}
+                  <span className="job-clear-confirm-note">The file stays on disk.</span>
+                </span>
+              </div>
+            </div>
+          ) : null}
+
           {job.error ? (
             <p className="job-error" role="alert">
               {job.error.message}
@@ -388,10 +441,13 @@ export function JobRow({
       <JobActions
         job={job}
         compact={compact}
+        confirmingClear={confirmingClear}
         onCancel={onCancel}
         onRetry={onRetry}
-        onRemove={onRemove}
         onOpenLocation={onOpenLocation}
+        onClear={beginClear}
+        onConfirmClear={beginRemove}
+        onCancelClear={() => setConfirmingClear(false)}
       />
     </article>
   )
