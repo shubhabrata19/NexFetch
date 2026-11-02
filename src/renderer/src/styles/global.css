@@ -303,10 +303,54 @@ button:disabled {
   white-space: nowrap;
 }
 
+.sidebar-footer-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+  gap: 8px;
+}
+
 .version-label {
   padding-left: 10px;
   color: var(--sidebar-muted);
   font-size: 11px;
+}
+
+.theme-toggle {
+  display: grid;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  place-items: center;
+  color: var(--sidebar-muted);
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid var(--sidebar-border);
+  border-radius: 8px;
+  transition:
+    background-color var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard),
+    transform var(--motion-fast) var(--ease-standard);
+}
+
+.theme-toggle:hover {
+  color: var(--sidebar-text);
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.theme-toggle:active {
+  transform: scale(0.94);
+}
+
+.theme-toggle svg {
+  transition: transform var(--motion-base) var(--ease-standard);
+}
+
+.theme-toggle:hover svg {
+  transform: rotate(-12deg);
 }
 
 .sidebar-activity {
@@ -1475,6 +1519,10 @@ button:disabled {
   .system-chip-label,
   .version-label {
     display: none;
+  }
+
+  .sidebar-footer-meta {
+    justify-content: center;
   }
 
   .nav-button,

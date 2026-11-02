@@ -13,8 +13,10 @@ interface SidebarProps {
   version: string
   dependencies: DependencyStatus | null
   jobs: DownloadJob[]
+  resolvedTheme: 'light' | 'dark'
   onNavigate: (view: View) => void
   onStopJob: (jobId: string) => void
+  onToggleTheme: () => void
 }
 
 const NAV_ITEMS: Array<{ view: View; label: string; icon: 'download' | 'history' | 'settings' }> = [
@@ -44,10 +46,13 @@ export function Sidebar({
   version,
   dependencies,
   jobs,
+  resolvedTheme,
   onNavigate,
   onStopJob,
+  onToggleTheme,
 }: SidebarProps) {
   const system = systemSummary(dependencies)
+  const nextTheme = resolvedTheme === 'dark' ? 'light' : 'dark'
 
   return (
     <aside className="sidebar" aria-label="Primary navigation">
@@ -102,7 +107,18 @@ export function Sidebar({
           <StatusDot tone={system.tone} />
           <span className="system-chip-label">{system.label}</span>
         </button>
-        <span className="version-label">v{version}</span>
+        <div className="sidebar-footer-meta">
+          <span className="version-label">v{version}</span>
+          <button
+            type="button"
+            className="theme-toggle"
+            onClick={onToggleTheme}
+            aria-label={`Switch to ${nextTheme} theme`}
+            title={`Switch to ${nextTheme} theme`}
+          >
+            <Icon name={resolvedTheme === 'dark' ? 'sun' : 'moon'} size={15} />
+          </button>
+        </div>
       </div>
     </aside>
   )

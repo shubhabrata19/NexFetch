@@ -44,6 +44,7 @@ export default function App() {
   const [view, setView] = useState<View>('downloads')
   const [info, setInfo] = useState<AppInfo | null>(null)
   const [settings, setSettings] = useState<Settings | null>(null)
+  const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>(() => resolveTheme('system'))
   const [dependencies, setDependencies] = useState<DependencyStatus | null>(null)
   const [jobs, setJobs] = useState<DownloadJob[]>([])
   const [loading, setLoading] = useState(true)
@@ -132,10 +133,14 @@ export default function App() {
   useEffect(() => {
     if (!theme) return
     applyTheme(theme)
+    setResolvedTheme(resolveTheme(theme))
     if (theme !== 'system') return
 
     const query = window.matchMedia('(prefers-color-scheme: dark)')
-    const onChange = (): void => applyTheme('system')
+    const onChange = (): void => {
+      applyTheme('system')
+      setResolvedTheme(resolveTheme('system'))
+    }
     query.addEventListener('change', onChange)
     return () => query.removeEventListener('change', onChange)
   }, [theme])
@@ -158,6 +163,10 @@ export default function App() {
     },
     [showToast],
   )
+
+  const toggleTheme = useCallback((): void => {
+    void updateSettings({ theme: resolvedTheme === 'dark' ? 'light' : 'dark' })
+  }, [resolvedTheme, updateSettings])
 
   const chooseDirectory = useCallback(async (): Promise<void> => {
     const result = await window.nexfetch.system.chooseDirectory()
@@ -291,8 +300,10 @@ export default function App() {
         version={info.version}
         dependencies={dependencies}
         jobs={jobs}
+        resolvedTheme={resolvedTheme}
         onNavigate={setView}
         onStopJob={cancelJob}
+        onToggleTheme={toggleTheme}
       />
 
       <main className="main-scroll">

@@ -7,6 +7,8 @@ export type IconName =
   | 'refresh'
   | 'stop'
   | 'x'
+  | 'sun'
+  | 'moon'
   | 'alert'
   | 'check'
   | 'logo'
@@ -92,6 +94,26 @@ export function Icon({ name, size = 18, className }: IconProps) {
         <svg {...common}>
           <path d="m6 6 12 12" />
           <path d="M18 6 6 18" />
+        </svg>
+      )
+    case 'sun':
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="4" />
+          <path d="M12 2v2" />
+          <path d="M12 20v2" />
+          <path d="m4.93 4.93 1.42 1.42" />
+          <path d="m17.66 17.66 1.41 1.41" />
+          <path d="M2 12h2" />
+          <path d="M20 12h2" />
+          <path d="m6.34 17.66-1.41 1.41" />
+          <path d="m19.07 4.93-1.41 1.41" />
+        </svg>
+      )
+    case 'moon':
+      return (
+        <svg {...common}>
+          <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" />
         </svg>
       )
     case 'alert':
