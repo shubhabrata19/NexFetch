@@ -1,0 +1,7 @@
+.opencode/
+node_modules/
+out/
+release/
+dist/
+coverage/
+package-lock.json

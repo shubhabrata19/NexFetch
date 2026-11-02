@@ -1,0 +1,147 @@
+import { app, nativeTheme, session } from 'electron'
+import type { BrowserWindow } from 'electron'
+import { mkdirSync } from 'node:fs'
+import { join } from 'node:path'
+import { registerIpc } from './ipc/register-ipc'
+import { createAppMenu } from './menu'
+import { configureSession, hardenWebContents } from './security'
+import { DependencyService } from './services/dependency-service'
+import { Logger } from './services/logger'
+import { SettingsService } from './services/settings-service'
+import { createMainWindow } from './window'
+
+const isDev = !app.isPackaged
+
+app.setName('NexFetch')
+app.enableSandbox()
+
+let mainWindow: BrowserWindow | null = null
+let logger: Logger | null = null
+let disposeIpc: (() => void) | null = null
+
+function getMainWindow(): BrowserWindow | null {
+  return mainWindow
+}
+
+function focusMainWindow(): void {
+  if (!mainWindow) return
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  mainWindow.show()
+  mainWindow.focus()
+}
+
+const gotSingleInstanceLock = app.requestSingleInstanceLock()
+
+if (!gotSingleInstanceLock) {
+  app.quit()
+} else {
+  app.on('second-instance', focusMainWindow)
+
+  app.on('web-contents-created', (_event, contents) => {
+    hardenWebContents(contents)
+  })
+
+  app.on('render-process-gone', (_event, _webContents, details) => {
+    logger?.error('renderer_process_gone', {
+      reason: details.reason,
+      exitCode: details.exitCode,
+    })
+  })
+
+  app.on('child-process-gone', (_event, details) => {
+    logger?.warn('child_process_gone', {
+      type: details.type,
+      reason: details.reason,
+      exitCode: details.exitCode,
+    })
+  })
+
+  app.on('before-quit', () => {
+    logger?.info('app_quitting')
+  })
+
+  app.on('will-quit', () => {
+    disposeIpc?.()
+    disposeIpc = null
+  })
+
+  app.on('window-all-closed', () => {
+    if (process.platform !== 'darwin') app.quit()
+  })
+
+  app.on('activate', () => {
+    if (mainWindow) {
+      focusMainWindow()
+      return
+    }
+    if (logger) mainWindow = createMainWindow(isDev, logger)
+  })
+
+  void app
+    .whenReady()
+    .then(() => {
+      app.setAppUserModelId('com.nexfetch.desktop')
+
+      const appLogger = new Logger(app.getPath('logs'))
+      logger = appLogger
+      appLogger.info('app_starting', {
+        version: app.getVersion(),
+        platform: process.platform,
+        arch: process.arch,
+        isPackaged: app.isPackaged,
+      })
+
+      configureSession(session.defaultSession, isDev)
+      createAppMenu(isDev)
+
+      const settings = new SettingsService({
+        filePath: join(app.getPath('userData'), 'settings.json'),
+        defaultDownloadDirectory: join(app.getPath('downloads'), 'NexFetch'),
+      })
+
+      nativeTheme.themeSource = settings.get().theme
+
+      try {
+        mkdirSync(settings.get().downloadDirectory, { recursive: true })
+      } catch (error) {
+        appLogger.warn('download_directory_unavailable', {
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+
+      const dependencyService = new DependencyService({
+        bundledRoot: app.isPackaged ? process.resourcesPath : join(process.cwd(), 'resources'),
+        allowEnvOverrides: !app.isPackaged,
+      })
+
+      disposeIpc = registerIpc({
+        getWindow: getMainWindow,
+        settings,
+        dependencies: dependencyService,
+        logger: appLogger,
+      })
+
+      mainWindow = createMainWindow(isDev, appLogger)
+      appLogger.info('app_ready')
+    })
+    .catch((error: unknown) => {
+      logger?.error('app_startup_failed', {
+        error: error instanceof Error ? error.message : String(error),
+      })
+      app.quit()
+    })
+}
+
+process.on('uncaughtException', (error) => {
+  logger?.error('uncaught_exception', {
+    error: error.message,
+    stack: error.stack,
+  })
+  console.error(error)
+})
+
+process.on('unhandledRejection', (reason) => {
+  logger?.error('unhandled_rejection', {
+    error: reason instanceof Error ? reason.message : String(reason),
+  })
+})
