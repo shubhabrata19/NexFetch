@@ -157,6 +157,94 @@ function JobActions({
   )
 }
 
+function CompactJobDetails({ job }: { job: DownloadJob }) {
+  const percent = job.progress.percent
+  const terminal = isTerminalStatus(job.status)
+  const size = jobSize(job)
+  const state = (
+    <span className={`job-state job-state--${job.status}`}>
+      <span className="job-state-dot" aria-hidden="true" />
+      {STATUS_LABELS[job.status]}
+    </span>
+  )
+
+  if (terminal) {
+    return (
+      <div className="job-meta job-meta--compact">
+        {state}
+        {size ? <span className="job-size">{size}</span> : null}
+      </div>
+    )
+  }
+
+  if (job.status === 'queued') {
+    return (
+      <div className="job-meta job-meta--compact">
+        {state}
+        <span className="job-size">Waiting for a slot</span>
+      </div>
+    )
+  }
+
+  if (job.status === 'resolving') {
+    return (
+      <div className="job-meta job-meta--compact">
+        {state}
+        <span className="job-size">Reading video info</span>
+      </div>
+    )
+  }
+
+  if (job.status === 'cancelling') {
+    return (
+      <div className="job-meta job-meta--compact">
+        {state}
+        <span className="job-size">Stopping…</span>
+      </div>
+    )
+  }
+
+  const sizeLabel =
+    job.progress.downloadedBytes === null
+      ? null
+      : job.progress.totalBytes !== null
+        ? `${formatBytes(job.progress.downloadedBytes)} / ${formatBytes(job.progress.totalBytes)}`
+        : formatBytes(job.progress.downloadedBytes)
+
+  return (
+    <div className="job-progress-block">
+      <div className="job-progress-head">
+        {state}
+        <span className="job-percent">{percent === null ? '—' : `${Math.round(percent)}%`}</span>
+        {job.progress.bytesPerSecond !== null ? (
+          <span className="job-speed">{formatSpeed(job.progress.bytesPerSecond)}</span>
+        ) : null}
+      </div>
+
+      <div
+        className={`progress-track${percent === null ? ' progress-track--indeterminate' : ''}`}
+        role="progressbar"
+        aria-label={`Download progress for ${job.title}`}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={percent ?? undefined}
+      >
+        <span
+          className="progress-fill"
+          style={percent !== null ? { width: `${percent}%` } : undefined}
+        />
+      </div>
+
+      <div className="job-progress-foot">
+        <span className="job-size">{sizeLabel ?? 'Starting…'}</span>
+        {job.progress.etaSeconds !== null ? (
+          <span className="job-eta">ETA {formatEta(job.progress.etaSeconds)}</span>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
 export function JobRow({
   job,
   compact = false,
@@ -193,8 +281,8 @@ export function JobRow({
   return (
     <article
       className={`job-row job-row--${job.status}${compact ? ' job-row--compact' : ''}${
-        completionFlash ? ' job-row--just-completed' : ''
-      }`}
+        compact && terminal ? ' job-row--compact-terminal' : ''
+      }${completionFlash ? ' job-row--just-completed' : ''}`}
       aria-label={`${job.title}, ${STATUS_LABELS[job.status]}`}
     >
       <div className="job-row-content">
@@ -224,76 +312,69 @@ export function JobRow({
             {job.title}
           </h3>
 
-          {showProgress ? (
-            <div
-              className={`progress-track${percent === null ? ' progress-track--indeterminate' : ''}`}
-              role="progressbar"
-              aria-label={`Download progress for ${job.title}`}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={percent ?? undefined}
-            >
-              <span
-                className="progress-fill"
-                style={percent !== null ? { width: `${percent}%` } : undefined}
-              />
-            </div>
-          ) : null}
+          {compact ? (
+            <CompactJobDetails job={job} />
+          ) : (
+            <>
+              {showProgress ? (
+                <div
+                  className={`progress-track${percent === null ? ' progress-track--indeterminate' : ''}`}
+                  role="progressbar"
+                  aria-label={`Download progress for ${job.title}`}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={percent ?? undefined}
+                >
+                  <span
+                    className="progress-fill"
+                    style={percent !== null ? { width: `${percent}%` } : undefined}
+                  />
+                </div>
+              ) : null}
 
-          <div className="job-meta">
-            {compact ? (
-              <span className={`job-state job-state--${job.status}`}>
-                <span className="job-state-dot" aria-hidden="true" />
-                {STATUS_LABELS[job.status]}
-              </span>
-            ) : null}
-
-            {terminal ? (
-              size ? (
-                <span>{size}</span>
-              ) : null
-            ) : job.status === 'queued' ? (
-              <span>Waiting for a slot</span>
-            ) : job.status === 'resolving' ? (
-              <span>Reading video info</span>
-            ) : job.status === 'cancelling' ? (
-              <span>Stopping…</span>
-            ) : (
-              <>
-                <span className="job-percent">
-                  {percent === null ? '—' : `${Math.round(percent)}%`}
-                </span>
-                {job.progress.downloadedBytes === null ? (
-                  <span>Starting…</span>
-                ) : compact ? (
-                  <span>
-                    {job.progress.totalBytes !== null
-                      ? formatBytes(job.progress.totalBytes)
-                      : `${formatBytes(job.progress.downloadedBytes)} downloaded`}
-                  </span>
+              <div className="job-meta">
+                {terminal ? (
+                  size ? (
+                    <span>{size}</span>
+                  ) : null
+                ) : job.status === 'queued' ? (
+                  <span>Waiting for a slot</span>
+                ) : job.status === 'resolving' ? (
+                  <span>Reading video info</span>
+                ) : job.status === 'cancelling' ? (
+                  <span>Stopping…</span>
                 ) : (
-                  <span>
-                    {formatBytes(job.progress.downloadedBytes)}
-                    {job.progress.totalBytes !== null
-                      ? ` / ${formatBytes(job.progress.totalBytes)}`
-                      : ' downloaded'}
-                  </span>
+                  <>
+                    <span className="job-percent">
+                      {percent === null ? '—' : `${Math.round(percent)}%`}
+                    </span>
+                    {job.progress.downloadedBytes === null ? (
+                      <span>Starting…</span>
+                    ) : (
+                      <span>
+                        {formatBytes(job.progress.downloadedBytes)}
+                        {job.progress.totalBytes !== null
+                          ? ` / ${formatBytes(job.progress.totalBytes)}`
+                          : ' downloaded'}
+                      </span>
+                    )}
+                    {job.progress.bytesPerSecond !== null ? (
+                      <span>{formatSpeed(job.progress.bytesPerSecond)}</span>
+                    ) : null}
+                    {job.progress.etaSeconds !== null ? (
+                      <span className="job-eta">ETA {formatEta(job.progress.etaSeconds)}</span>
+                    ) : null}
+                  </>
                 )}
-                {job.progress.bytesPerSecond !== null ? (
-                  <span>{formatSpeed(job.progress.bytesPerSecond)}</span>
-                ) : null}
-                {job.progress.etaSeconds !== null ? (
-                  <span className="job-eta">ETA {formatEta(job.progress.etaSeconds)}</span>
-                ) : null}
-              </>
-            )}
 
-            {job.output?.files[0] && !compact ? (
-              <span className="job-output" title={job.output.files[0].path}>
-                {job.output.files[0].path.split(/[\\/]/).pop()}
-              </span>
-            ) : null}
-          </div>
+                {job.output?.files[0] ? (
+                  <span className="job-output" title={job.output.files[0].path}>
+                    {job.output.files[0].path.split(/[\\/]/).pop()}
+                  </span>
+                ) : null}
+              </div>
+            </>
+          )}
 
           {job.error ? (
             <p className="job-error" role="alert">

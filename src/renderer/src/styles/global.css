@@ -2356,6 +2356,20 @@ button:disabled {
   color: var(--muted);
 }
 
+.job-state--downloading {
+  animation: status-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes status-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
 .job-actions {
   display: flex;
   flex: 0 0 auto;
@@ -2440,10 +2454,11 @@ button:disabled {
 }
 
 .job-row--compact {
+  position: relative;
   display: grid;
-  grid-template-areas: 'thumb main actions';
-  grid-template-columns: 46px minmax(0, 1fr) auto;
-  align-items: center;
+  grid-template-areas: 'thumb main';
+  grid-template-columns: 46px minmax(0, 1fr);
+  align-items: start;
   gap: 9px;
   padding: 10px;
   border-left-width: 2px;
@@ -2457,7 +2472,7 @@ button:disabled {
 .job-row--compact .job-thumb {
   grid-area: thumb;
   width: 46px;
-  height: 29px;
+  height: 30px;
   border-radius: 5px;
 }
 
@@ -2473,6 +2488,7 @@ button:disabled {
 
 .job-row--compact .job-title {
   display: -webkit-box;
+  padding-right: 30px;
   overflow: hidden;
   font-size: 13px;
   line-height: 1.35;
@@ -2481,27 +2497,87 @@ button:disabled {
   -webkit-line-clamp: 2;
 }
 
-.job-row--compact .progress-track {
-  height: 3px;
-  margin: 6px 0 0;
+.job-row--compact-terminal .job-title {
+  padding-right: 62px;
 }
 
-.job-row--compact .job-meta {
-  flex-wrap: wrap;
-  gap: 2px 8px;
-  margin-top: 5px;
-  overflow: visible;
+.job-progress-block {
+  min-width: 0;
+  margin-top: 7px;
+}
+
+.job-progress-head {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 6px;
   font-size: 10.5px;
   line-height: 1.4;
-  white-space: normal;
 }
 
-.job-row--compact .job-meta > span {
+.job-progress-head .job-state {
+  flex: 0 0 auto;
+}
+
+.job-progress-head .job-percent {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.job-progress-head .job-speed {
+  margin-left: auto;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
-.job-row--compact .job-percent {
-  font-size: 11px;
+.job-progress-block .progress-track {
+  height: 4px;
+  margin: 4px 0;
+}
+
+.job-progress-foot {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  min-width: 0;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+
+.job-progress-foot .job-size {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.job-progress-foot .job-eta {
+  flex: 0 0 auto;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.job-row--compact .job-meta--compact {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 7px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.4;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.job-row--compact .job-meta--compact .job-size {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .job-row--compact .job-engine,
@@ -2511,12 +2587,15 @@ button:disabled {
 }
 
 .job-row--compact .job-actions {
-  grid-area: actions;
-  flex-direction: column;
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 1;
+  flex-direction: row;
   flex-wrap: nowrap;
   max-width: none;
   gap: 2px;
-  justify-content: center;
+  justify-content: flex-start;
 }
 
 .job-row--compact .icon-button {
