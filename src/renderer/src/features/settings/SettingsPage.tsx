@@ -32,6 +32,12 @@ const RATE_OPTIONS = [
   { value: 50 * 1024 * 1024, label: '50 MB/s' },
 ] as const
 
+function rateInMegabytes(bytesPerSecond: number): string {
+  if (bytesPerSecond <= 0) return ''
+  const megabytes = bytesPerSecond / (1024 * 1024)
+  return String(Number.isInteger(megabytes) ? megabytes : Number(megabytes.toFixed(2)))
+}
+
 export function SettingsPage({
   settings,
   appInfo,
@@ -43,6 +49,13 @@ export function SettingsPage({
   onOpenLogs,
 }: SettingsPageProps) {
   const [saving, setSaving] = useState(false)
+  const [customRateRequested, setCustomRateRequested] = useState(false)
+
+  const matchedRateOption = RATE_OPTIONS.find(
+    (option) => option.value === settings.maxDownloadRateBytesPerSecond,
+  )
+  const rateSelectValue = matchedRateOption ? String(matchedRateOption.value) : 'custom'
+  const showCustomRate = customRateRequested || rateSelectValue === 'custom'
 
   const applyPatch = async (patch: SettingsPatch): Promise<void> => {
     setSaving(true)
@@ -155,24 +168,74 @@ export function SettingsPage({
                 Maximum download speed
               </label>
               <p>
-                Caps each download; parallel connections share the limit. Changes apply to new
-                downloads.
+                Caps each download. When fragments download in parallel, they share the limit.
+                Changes apply to new downloads.
               </p>
             </div>
-            <select
-              id="setting-rate-limit"
-              className="select"
-              value={settings.maxDownloadRateBytesPerSecond}
-              onChange={(event) =>
-                void applyPatch({ maxDownloadRateBytesPerSecond: Number(event.target.value) })
-              }
-            >
-              {RATE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+            <div className="setting-control">
+              <select
+                id="setting-rate-limit"
+                className="select"
+                value={showCustomRate ? 'custom' : rateSelectValue}
+                onChange={(event) => {
+                  const value = event.target.value
+                  if (value === 'custom') {
+                    setCustomRateRequested(true)
+                    return
+                  }
+                  setCustomRateRequested(false)
+                  void applyPatch({ maxDownloadRateBytesPerSecond: Number(value) })
+                }}
+              >
+                {RATE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+                <option value="custom">Custom…</option>
+              </select>
+
+              {showCustomRate ? (
+                <form
+                  className="rate-custom"
+                  onSubmit={(event) => {
+                    event.preventDefault()
+                    const data = new FormData(event.currentTarget)
+                    const megabytes = Number(data.get('custom-rate'))
+                    if (!Number.isFinite(megabytes) || megabytes <= 0) return
+                    setCustomRateRequested(false)
+                    void applyPatch({
+                      maxDownloadRateBytesPerSecond: Math.min(
+                        1_000_000_000,
+                        Math.round(megabytes * 1024 * 1024),
+                      ),
+                    })
+                  }}
+                >
+                  <input
+                    key={settings.maxDownloadRateBytesPerSecond}
+                    className="rate-input"
+                    name="custom-rate"
+                    type="number"
+                    min="0.01"
+                    max="953.67"
+                    step="0.01"
+                    defaultValue={rateInMegabytes(settings.maxDownloadRateBytesPerSecond)}
+                    placeholder="1"
+                    aria-label="Custom maximum download speed in megabytes per second"
+                    required
+                  />
+                  <span className="rate-unit">MB/s</span>
+                  <button
+                    type="submit"
+                    className="button button--secondary button--small"
+                    disabled={saving}
+                  >
+                    Apply
+                  </button>
+                </form>
+              ) : null}
+            </div>
           </div>
         </section>
 

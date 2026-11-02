@@ -1182,6 +1182,27 @@ button:disabled {
   border-radius: 8px;
 }
 
+.rate-custom {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rate-input {
+  width: 110px;
+  padding: 9px 12px;
+  color: var(--text);
+  font-size: 13px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.rate-unit {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .settings-actions {
   display: flex;
   flex-wrap: wrap;
