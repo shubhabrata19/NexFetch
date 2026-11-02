@@ -14,6 +14,10 @@ export function formatBytes(bytes: number | null | undefined): string {
   return `${value >= 100 ? value.toFixed(0) : value.toFixed(1)} ${units[unitIndex]}`
 }
 
+export function formatReportedSize(bytes: number | null | undefined): string {
+  return bytes === null || bytes === undefined ? 'Size not reported' : formatBytes(bytes)
+}
+
 export function formatSpeed(bytesPerSecond: number | null): string {
   if (bytesPerSecond === null || !Number.isFinite(bytesPerSecond) || bytesPerSecond <= 0) {
     return '—'

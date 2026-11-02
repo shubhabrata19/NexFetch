@@ -308,6 +308,7 @@ export default function App() {
               void openDestination()
             }}
             onOpenSettings={() => setView('settings')}
+            onViewHistory={() => setView('history')}
           />
         ) : null}
 

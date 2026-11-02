@@ -4,8 +4,7 @@ import type {
   DownloadJob,
   Settings,
 } from '@shared/ipc/contracts'
-import { Icon } from '../../components/Icon'
-import { JobList } from '../../components/JobList'
+import { QueuePanel } from '../../components/QueuePanel'
 import { YoutubeDownloadPanel } from '../youtube/YoutubeDownloadPanel'
 
 interface DownloadsPageProps {
@@ -19,6 +18,7 @@ interface DownloadsPageProps {
   onOpenJobLocation: (jobId: string, revealFile: boolean) => void
   onOpenDestination: () => void
   onOpenSettings: () => void
+  onViewHistory: () => void
 }
 
 export function DownloadsPage({
@@ -32,13 +32,10 @@ export function DownloadsPage({
   onOpenJobLocation,
   onOpenDestination,
   onOpenSettings,
+  onViewHistory,
 }: DownloadsPageProps) {
-  const activeCount = jobs.filter(
-    (job) => !['completed', 'failed', 'cancelled'].includes(job.status),
-  ).length
-
   return (
-    <div className="page">
+    <div className="page page--downloads">
       <header className="page-header">
         <div>
           <p className="eyebrow">Workspace</p>
@@ -48,47 +45,31 @@ export function DownloadsPage({
             quality up to 4K.
           </p>
         </div>
-        <div className="header-actions">
-          <span className="badge badge--neutral">
-            {jobs.length} {jobs.length === 1 ? 'job' : 'jobs'}
-          </span>
-          <button
-            type="button"
-            className="button button--secondary button--small"
-            onClick={onOpenDestination}
-          >
-            <Icon name="folder" size={16} />
-            Open folder
-          </button>
-        </div>
+        <span className="badge badge--neutral">
+          {jobs.length} {jobs.length === 1 ? 'job' : 'jobs'}
+        </span>
       </header>
 
-      <YoutubeDownloadPanel
-        settings={settings}
-        dependencies={dependencies}
-        onCreateJob={onCreateJob}
-        onOpenSettings={onOpenSettings}
-      />
-
-      <section className="queue-section" aria-labelledby="queue-title">
-        <div className="section-heading">
-          <div>
-            <p className="eyebrow">Activity</p>
-            <h2 id="queue-title">Queue</h2>
-          </div>
-          <span className="badge badge--neutral">{activeCount} active</span>
+      <div className="downloads-workspace">
+        <div className="download-main">
+          <YoutubeDownloadPanel
+            settings={settings}
+            dependencies={dependencies}
+            onCreateJob={onCreateJob}
+            onOpenSettings={onOpenSettings}
+          />
         </div>
-        <JobList
+
+        <QueuePanel
           jobs={jobs}
-          emptyTitle="Your queue is empty"
-          emptyMessage="Fetch a YouTube video above to choose a quality and start your first download."
-          emptyIcon="download"
           onCancel={onCancelJob}
           onRetry={onRetryJob}
           onRemove={onRemoveJob}
           onOpenLocation={onOpenJobLocation}
+          onOpenDestination={onOpenDestination}
+          onViewHistory={onViewHistory}
         />
-      </section>
+      </div>
     </div>
   )
 }

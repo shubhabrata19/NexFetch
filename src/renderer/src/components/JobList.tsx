@@ -27,7 +27,7 @@ const STATUS_LABELS: Record<JobStatus, string> = {
   cancelled: 'Cancelled',
 }
 
-function isTerminal(status: JobStatus): boolean {
+export function isTerminal(status: JobStatus): boolean {
   return status === 'completed' || status === 'failed' || status === 'cancelled'
 }
 
@@ -59,14 +59,16 @@ function jobSize(job: DownloadJob): string {
   return 'Size unknown'
 }
 
-function JobRow({
+export function JobRow({
   job,
+  compact = false,
   onCancel,
   onRetry,
   onRemove,
   onOpenLocation,
 }: {
   job: DownloadJob
+  compact?: boolean
   onCancel: (jobId: string) => void
   onRetry: (jobId: string) => void
   onRemove: (jobId: string) => void
@@ -86,7 +88,10 @@ function JobRow({
   }
 
   return (
-    <article className="job-row" aria-label={`${job.title}, ${STATUS_LABELS[job.status]}`}>
+    <article
+      className={`job-row${compact ? ' job-row--compact' : ''}`}
+      aria-label={`${job.title}, ${STATUS_LABELS[job.status]}`}
+    >
       <div className="job-main">
         <div className="job-title-line">
           <span className={`badge job-status ${statusTone(job.status)}`}>
@@ -176,7 +181,7 @@ function JobRow({
               <Icon name="folder" size={15} />
               Open folder
             </button>
-            {job.output.files[0] ? (
+            {job.output.files[0] && !compact ? (
               <button
                 type="button"
                 className="button button--ghost button--small"
@@ -188,7 +193,7 @@ function JobRow({
           </>
         ) : null}
 
-        {terminal ? (
+        {terminal && !compact ? (
           <button
             type="button"
             className="button button--ghost button--small job-remove"
