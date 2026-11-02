@@ -17,7 +17,10 @@ afterEach(() => {
   }
 })
 
-function createContext(overrides: Partial<EngineRunContext> = {}): {
+function createContext(
+  overrides: Partial<EngineRunContext> = {},
+  selectionOverrides: Partial<YoutubeResolvedSelection> = {},
+): {
   ctx: EngineRunContext
   events: EngineEvent[]
   workspaceDir: string
@@ -34,6 +37,8 @@ function createContext(overrides: Partial<EngineRunContext> = {}): {
     container: 'mp4',
     selector: '137+140',
     formatIds: ['137', '140'],
+    fragmented: true,
+    ...selectionOverrides,
   }
 
   const details: YoutubeJobDetails = {
@@ -186,5 +191,24 @@ describe('youtube engine', () => {
     const index = args.indexOf('--limit-rate')
     expect(index).toBeGreaterThanOrEqual(0)
     expect(args[index + 1]).toBe(String(Math.ceil((10 * 1024 * 1024) / 4)))
+  })
+
+  it('applies the full speed limit when the download is not fragmented', async () => {
+    const { ctx, workspaceDir } = createContext(
+      {
+        concurrentFragments: 4,
+        maxDownloadRateBytesPerSecond: 10 * 1024 * 1024,
+      },
+      { fragmented: false },
+    )
+    const args: string[] = []
+    const engine = new YoutubeEngine(successfulRunner(workspaceDir, { args }))
+
+    await engine.start(ctx.job, ctx)
+
+    expect(args).not.toContain('--concurrent-fragments')
+    const index = args.indexOf('--limit-rate')
+    expect(index).toBeGreaterThanOrEqual(0)
+    expect(args[index + 1]).toBe(String(10 * 1024 * 1024))
   })
 })

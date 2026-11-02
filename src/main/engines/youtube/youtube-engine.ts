@@ -323,12 +323,10 @@ export class YoutubeEngine implements DownloadEngine {
       if (/\[(Merger|VideoConvertor|Fixup)/i.test(line)) emitProcessing()
     }
 
+    const parallelConnections = selection.fragmented ? Math.max(1, ctx.concurrentFragments) : 1
     const perConnectionRateLimit =
       ctx.maxDownloadRateBytesPerSecond > 0
-        ? Math.max(
-            1,
-            Math.ceil(ctx.maxDownloadRateBytesPerSecond / Math.max(1, ctx.concurrentFragments)),
-          )
+        ? Math.max(1, Math.ceil(ctx.maxDownloadRateBytesPerSecond / parallelConnections))
         : null
 
     const args = [
@@ -345,10 +343,10 @@ export class YoutubeEngine implements DownloadEngine {
       '--print',
       'after_move:NXF_FILE %(filepath)j',
       '--no-colors',
-      '--concurrent-fragments',
-      String(ctx.concurrentFragments),
-      // yt-dlp applies --limit-rate per fragment connection, so split the
-      // per-download cap across the configured connections.
+      ...(selection.fragmented ? ['--concurrent-fragments', String(ctx.concurrentFragments)] : []),
+      // yt-dlp applies --limit-rate per fragment connection. Split the cap
+      // across parallel connections only for fragmented downloads; a
+      // single-file HTTPS download uses one connection and gets the full rate.
       ...(perConnectionRateLimit !== null ? ['--limit-rate', String(perConnectionRateLimit)] : []),
       '-f',
       selection.selector,

@@ -108,6 +108,7 @@ describe('YouTube selection resolution', () => {
       requiresFfmpeg: true,
       container: 'mkv',
       selector: '313+251',
+      fragmented: false,
     })
     expect(selection.requiredDependencies).toEqual(['yt-dlp', 'ffmpeg', 'ffprobe'])
     expect(selection.verification).toEqual({
@@ -117,6 +118,50 @@ describe('YouTube selection resolution', () => {
     expect(selection.details?.selectedVideo?.label).toBe('2160p60')
     expect(selection.filenameBase).toMatch(/\[dQw4w9WgXcQ\]$/)
     expect(selection.filenameBase).not.toMatch(/[/\\?*]/)
+  })
+
+  it('marks single-file HTTPS selections as not fragmented', () => {
+    const selection = resolveYoutubeSelection(preview([progressive]), {
+      mode: 'video',
+      videoFormatId: '22',
+    })
+    expect(selection.data).toMatchObject({ fragmented: false })
+  })
+
+  it('marks DASH selections as fragmented', () => {
+    const dashVideo = youtubeFormat({
+      formatId: '313',
+      protocol: 'http_dash_segments',
+    })
+    const selection = resolveYoutubeSelection(preview([dashVideo, audioOpus]), {
+      mode: 'video',
+      videoFormatId: '313',
+    })
+    expect(selection.data).toMatchObject({ fragmented: true })
+  })
+
+  it('marks HLS audio-only selections as fragmented', () => {
+    const hlsAudio = youtubeFormat({
+      formatId: '251',
+      width: null,
+      height: null,
+      fps: null,
+      ext: 'webm',
+      videoCodec: null,
+      audioCodec: 'opus',
+      bitrateKbps: 160,
+      sizeBytes: 12,
+      hasVideo: false,
+      hasAudio: true,
+      label: 'Audio',
+      resolutionLabel: 'Audio',
+      protocol: 'm3u8_native',
+    })
+    const selection = resolveYoutubeSelection(preview([hlsAudio]), {
+      mode: 'audio',
+      audioFormatId: '251',
+    })
+    expect(selection.data).toMatchObject({ fragmented: true })
   })
 
   it('prefers AAC audio for an H.264 video selection', () => {

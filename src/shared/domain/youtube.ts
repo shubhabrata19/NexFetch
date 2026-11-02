@@ -52,4 +52,5 @@ export interface YoutubeResolvedSelection {
   container: string
   selector: string
   formatIds: string[]
+  fragmented: boolean
 }

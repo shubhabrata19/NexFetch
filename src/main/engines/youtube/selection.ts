@@ -24,6 +24,16 @@ function isH264(format: YoutubeFormat): boolean {
   return codec.includes('avc') || codec.includes('h264')
 }
 
+/**
+ * yt-dlp only downloads HLS/DASH sources concurrently. A single-file HTTPS
+ * format ignores --concurrent-fragments and uses one connection.
+ */
+function isFragmentedProtocol(protocol: string | null): boolean {
+  if (!protocol) return false
+  const normalized = protocol.toLowerCase()
+  return normalized.includes('m3u8') || normalized.includes('dash') || normalized.includes('frag')
+}
+
 function findFormat(preview: YoutubePreview, formatId: string): YoutubeFormat {
   const format = preview.formats.find((candidate) => candidate.formatId === formatId)
   if (!format) {
@@ -79,6 +89,9 @@ function buildSelection(
   const formatIds = [video?.formatId, audio?.formatId].filter(
     (value): value is string => typeof value === 'string',
   )
+  const fragmented = [video, audio].some(
+    (format) => format !== null && isFragmentedProtocol(format.protocol),
+  )
   const resolved: YoutubeResolvedSelection = {
     mode,
     videoFormatId: video?.formatId ?? null,
@@ -88,6 +101,7 @@ function buildSelection(
     container,
     selector: formatIds.join('+'),
     formatIds,
+    fragmented,
   }
 
   const details: YoutubeJobDetails = {
