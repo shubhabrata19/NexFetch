@@ -6,6 +6,7 @@ import { isActiveStatus } from '../lib/jobs'
 interface SidebarActivityProps {
   jobs: DownloadJob[]
   onNavigate: () => void
+  onStopJob: (jobId: string) => void
 }
 
 const STATUS_PRIORITY: Record<string, number> = {
@@ -26,11 +27,19 @@ function activeJobs(jobs: DownloadJob[]): DownloadJob[] {
     })
 }
 
-export function SidebarActivity({ jobs, onNavigate }: SidebarActivityProps) {
+export function SidebarActivity({ jobs, onNavigate, onStopJob }: SidebarActivityProps) {
   const active = activeJobs(jobs)
   const visible = active.slice(0, 2)
   const first = active[0]
   const firstPercent = first?.progress.percent ?? null
+
+  if (active.length === 0) {
+    return (
+      <div className="sidebar-activity sidebar-activity--idle">
+        <p className="sidebar-activity-idle">No active downloads</p>
+      </div>
+    )
+  }
 
   return (
     <div className="sidebar-activity">
@@ -41,66 +50,69 @@ export function SidebarActivity({ jobs, onNavigate }: SidebarActivityProps) {
         aria-label="Open active downloads"
       >
         <span className="eyebrow">Active downloads</span>
-        <span
-          className={`sidebar-activity-count${active.length === 0 ? ' sidebar-activity-count--idle' : ''}`}
-          key={active.length}
-        >
+        <span className="sidebar-activity-count" key={active.length}>
           {active.length}
         </span>
       </button>
 
-      {visible.length > 0 ? (
-        <div className="sidebar-activity-list">
-          {visible.map((job) => {
-            const percent = job.progress.percent
-            return (
-              <div className="sidebar-job" key={job.id}>
-                <div className="sidebar-job-thumb">
-                  {job.details?.engineId === 'youtube' && job.details.thumbnailUrl ? (
-                    <img
-                      src={job.details.thumbnailUrl}
-                      alt=""
-                      loading="lazy"
-                      referrerPolicy="no-referrer"
-                    />
-                  ) : (
-                    <Icon name="download" size={13} />
-                  )}
+      <div className="sidebar-activity-list">
+        {visible.map((job) => {
+          const percent = job.progress.percent
+          return (
+            <div className="sidebar-job" key={job.id}>
+              <div className="sidebar-job-thumb">
+                {job.details?.engineId === 'youtube' && job.details.thumbnailUrl ? (
+                  <img
+                    src={job.details.thumbnailUrl}
+                    alt=""
+                    loading="lazy"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <Icon name="download" size={13} />
+                )}
+              </div>
+              <div className="sidebar-job-body">
+                <div className="sidebar-job-title" title={job.title}>
+                  {job.title}
                 </div>
-                <div className="sidebar-job-body">
-                  <div className="sidebar-job-title" title={job.title}>
-                    {job.title}
-                  </div>
-                  <div className="sidebar-job-meta">
-                    <span>{percent === null ? 'In progress' : `${Math.round(percent)}%`}</span>
-                    {job.progress.bytesPerSecond !== null ? (
-                      <span>{formatSpeed(job.progress.bytesPerSecond)}</span>
-                    ) : null}
-                  </div>
-                  <div
-                    className={`sidebar-progress${percent === null ? ' sidebar-progress--indeterminate' : ''}`}
-                    role="progressbar"
-                    aria-label={`${job.title} progress`}
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    aria-valuenow={percent ?? undefined}
-                  >
-                    <span
-                      className="sidebar-progress-fill"
-                      style={percent !== null ? { width: `${percent}%` } : undefined}
-                    />
-                  </div>
+                <div className="sidebar-job-meta">
+                  <span>{percent === null ? 'In progress' : `${Math.round(percent)}%`}</span>
+                  {job.progress.bytesPerSecond !== null ? (
+                    <span>{formatSpeed(job.progress.bytesPerSecond)}</span>
+                  ) : null}
+                </div>
+                <div
+                  className={`sidebar-progress${percent === null ? ' sidebar-progress--indeterminate' : ''}`}
+                  role="progressbar"
+                  aria-label={`${job.title} progress`}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={percent ?? undefined}
+                >
+                  <span
+                    className="sidebar-progress-fill"
+                    style={percent !== null ? { width: `${percent}%` } : undefined}
+                  />
                 </div>
               </div>
-            )
-          })}
-          {active.length > visible.length ? (
-            <span className="sidebar-activity-more">+{active.length - visible.length} more</span>
-          ) : null}
-        </div>
-      ) : (
-        <p className="sidebar-activity-idle">No active downloads</p>
-      )}
+              <button
+                type="button"
+                className="sidebar-job-stop"
+                onClick={() => onStopJob(job.id)}
+                disabled={job.status === 'cancelling'}
+                title={job.status === 'cancelling' ? 'Stopping download' : `Stop ${job.title}`}
+                aria-label={job.status === 'cancelling' ? 'Stopping download' : `Stop ${job.title}`}
+              >
+                <Icon name="stop" size={11} />
+              </button>
+            </div>
+          )
+        })}
+        {active.length > visible.length ? (
+          <span className="sidebar-activity-more">+{active.length - visible.length} more</span>
+        ) : null}
+      </div>
 
       <button type="button" className="sidebar-activity-link" onClick={onNavigate}>
         View queue
@@ -115,11 +127,9 @@ export function SidebarActivity({ jobs, onNavigate }: SidebarActivityProps) {
         title={`${active.length} active downloads`}
       >
         <Icon name="download" size={18} />
-        {active.length > 0 ? (
-          <span className="sidebar-activity-count" key={`compact-${active.length}`}>
-            {active.length}
-          </span>
-        ) : null}
+        <span className="sidebar-activity-count" key={`compact-${active.length}`}>
+          {active.length}
+        </span>
         {first ? (
           <span
             className={`sidebar-compact-progress${firstPercent === null ? ' sidebar-progress--indeterminate' : ''}`}

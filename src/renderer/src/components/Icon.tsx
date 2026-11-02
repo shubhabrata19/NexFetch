@@ -1,5 +1,16 @@
 export type IconName =
-  'download' | 'history' | 'settings' | 'folder' | 'refresh' | 'alert' | 'check' | 'logo' | 'spark'
+  | 'download'
+  | 'history'
+  | 'settings'
+  | 'folder'
+  | 'file'
+  | 'refresh'
+  | 'stop'
+  | 'x'
+  | 'alert'
+  | 'check'
+  | 'logo'
+  | 'spark'
 
 interface IconProps {
   name: IconName
@@ -56,11 +67,31 @@ export function Icon({ name, size = 18, className }: IconProps) {
           <path d="M3 7a2 2 0 0 1 2-2h5l2 2h5a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
         </svg>
       )
+    case 'file':
+      return (
+        <svg {...common}>
+          <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+          <path d="M14 3v5h5" />
+        </svg>
+      )
     case 'refresh':
       return (
         <svg {...common}>
           <path d="M20 11a8 8 0 1 0-2.3 6.7" />
           <path d="M20 4v7h-7" />
+        </svg>
+      )
+    case 'stop':
+      return (
+        <svg {...common}>
+          <rect x="6" y="6" width="12" height="12" rx="2" />
+        </svg>
+      )
+    case 'x':
+      return (
+        <svg {...common}>
+          <path d="m6 6 12 12" />
+          <path d="M18 6 6 18" />
         </svg>
       )
     case 'alert':

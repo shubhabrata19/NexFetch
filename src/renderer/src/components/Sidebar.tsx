@@ -14,6 +14,7 @@ interface SidebarProps {
   dependencies: DependencyStatus | null
   jobs: DownloadJob[]
   onNavigate: (view: View) => void
+  onStopJob: (jobId: string) => void
 }
 
 const NAV_ITEMS: Array<{ view: View; label: string; icon: 'download' | 'history' | 'settings' }> = [
@@ -38,7 +39,14 @@ function systemSummary(dependencies: DependencyStatus | null): {
   return { label: 'Setup needed', tone: 'warning' }
 }
 
-export function Sidebar({ view, version, dependencies, jobs, onNavigate }: SidebarProps) {
+export function Sidebar({
+  view,
+  version,
+  dependencies,
+  jobs,
+  onNavigate,
+  onStopJob,
+}: SidebarProps) {
   const system = systemSummary(dependencies)
 
   return (
@@ -52,7 +60,7 @@ export function Sidebar({ view, version, dependencies, jobs, onNavigate }: Sideb
             <span>Nex</span>
             <span className="brand-name-accent">Fetch</span>
           </span>
-          <span className="brand-tagline">Universal Download Manager</span>
+          <span className="brand-tagline">Download manager</span>
         </div>
       </div>
 
@@ -77,7 +85,11 @@ export function Sidebar({ view, version, dependencies, jobs, onNavigate }: Sideb
       </nav>
 
       <div className="sidebar-activity-wrap">
-        <SidebarActivity jobs={jobs} onNavigate={() => onNavigate('downloads')} />
+        <SidebarActivity
+          jobs={jobs}
+          onNavigate={() => onNavigate('downloads')}
+          onStopJob={onStopJob}
+        />
       </div>
 
       <div className="sidebar-footer">

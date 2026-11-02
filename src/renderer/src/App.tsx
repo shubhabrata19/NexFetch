@@ -292,6 +292,7 @@ export default function App() {
         dependencies={dependencies}
         jobs={jobs}
         onNavigate={setView}
+        onStopJob={cancelJob}
       />
 
       <main className="main-scroll">

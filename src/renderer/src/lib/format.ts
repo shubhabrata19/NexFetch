@@ -15,7 +15,7 @@ export function formatBytes(bytes: number | null | undefined): string {
 }
 
 export function formatReportedSize(bytes: number | null | undefined): string {
-  return bytes === null || bytes === undefined ? 'Size not reported' : formatBytes(bytes)
+  return bytes === null || bytes === undefined ? '' : formatBytes(bytes)
 }
 
 export function formatSpeed(bytesPerSecond: number | null): string {

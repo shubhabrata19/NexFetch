@@ -74,6 +74,10 @@ function formatDetail(format: YoutubeFormat): string {
   return codecs.length > 0 ? codecs : '—'
 }
 
+function joinMetaParts(parts: Array<string | null | undefined>): string {
+  return parts.filter((part): part is string => Boolean(part)).join(' · ')
+}
+
 function FormatBadges({ format }: { format: YoutubeFormat }) {
   return (
     <span className="format-badges">
@@ -229,23 +233,31 @@ export function YoutubeDownloadPanel({
     if (!preview) return null
     if (selection.mode === 'best-up-to-4k') {
       if (!preview.bestUpTo4k) return 'No eligible format'
-      return [
+      return joinMetaParts([
         preview.bestUpTo4k.resolutionLabel,
         preview.bestUpTo4k.predictedContainer.toUpperCase(),
         formatReportedSize(preview.bestUpTo4k.estimatedBytes),
-      ].join(' · ')
+      ])
     }
     if (selection.mode === 'audio') {
       const format = audioFormats.find(
         (candidate) => candidate.formatId === selection.audioFormatId,
       )
       return format
-        ? `${format.resolutionLabel} · ${format.ext.toUpperCase()} · ${formatReportedSize(format.sizeBytes)}`
+        ? joinMetaParts([
+            format.resolutionLabel,
+            format.ext.toUpperCase(),
+            formatReportedSize(format.sizeBytes),
+          ])
         : 'Audio selection unavailable'
     }
     const format = videoFormats.find((candidate) => candidate.formatId === selection.videoFormatId)
     return format
-      ? `${format.resolutionLabel} · ${format.ext.toUpperCase()} · ${formatReportedSize(format.sizeBytes)}`
+      ? joinMetaParts([
+          format.resolutionLabel,
+          format.ext.toUpperCase(),
+          formatReportedSize(format.sizeBytes),
+        ])
       : 'Video selection unavailable'
   })()
 
@@ -438,9 +450,11 @@ export function YoutubeDownloadPanel({
                       <span className="badge badge--accent">Recommended</span>
                     </span>
                     <span className="best-choice-meta">
-                      {preview.bestUpTo4k.resolutionLabel} ·{' '}
-                      {preview.bestUpTo4k.predictedContainer.toUpperCase()} ·{' '}
-                      {formatReportedSize(preview.bestUpTo4k.estimatedBytes)}
+                      {joinMetaParts([
+                        preview.bestUpTo4k.resolutionLabel,
+                        preview.bestUpTo4k.predictedContainer.toUpperCase(),
+                        formatReportedSize(preview.bestUpTo4k.estimatedBytes),
+                      ])}
                     </span>
                     {preview.bestUpTo4k.requiresFfmpeg ? (
                       <span className="best-choice-note">
@@ -479,15 +493,8 @@ export function YoutubeDownloadPanel({
                         </span>
                       </span>
                       <FormatBadges format={format} />
-                      <span
-                        className="format-size"
-                        title={
-                          format.sizeBytes === null
-                            ? 'YouTube did not report a size for this format.'
-                            : undefined
-                        }
-                      >
-                        {format.sizeBytes === null ? 'Not reported' : formatBytes(format.sizeBytes)}
+                      <span className="format-size">
+                        {format.sizeBytes === null ? null : formatBytes(format.sizeBytes)}
                       </span>
                     </label>
                   )
@@ -495,8 +502,8 @@ export function YoutubeDownloadPanel({
               </div>
 
               <p className="format-note">
-                Adaptive video · audio added automatically. Size is not reported by YouTube for some
-                formats; the actual size is known after download.
+                Adaptive video · audio added automatically. Sizes appear when YouTube reports them;
+                the actual size is confirmed after download.
               </p>
 
               {preview.audioOnlyAvailable && audioFormats.length > 0 ? (
@@ -532,17 +539,8 @@ export function YoutubeDownloadPanel({
                             </span>
                           </span>
                           <FormatBadges format={format} />
-                          <span
-                            className="format-size"
-                            title={
-                              format.sizeBytes === null
-                                ? 'YouTube did not report a size for this format.'
-                                : undefined
-                            }
-                          >
-                            {format.sizeBytes === null
-                              ? 'Not reported'
-                              : formatBytes(format.sizeBytes)}
+                          <span className="format-size">
+                            {format.sizeBytes === null ? null : formatBytes(format.sizeBytes)}
                           </span>
                         </label>
                       )

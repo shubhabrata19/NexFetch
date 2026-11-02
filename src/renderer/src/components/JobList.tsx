@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { DownloadJob, JobStatus } from '@shared/domain/job'
 import { Icon } from './Icon'
+import type { IconName } from './Icon'
 import { isTerminalStatus } from '../lib/jobs'
 import { formatBytes, formatEta, formatSpeed } from '../lib/format'
 
@@ -51,10 +52,109 @@ function jobDetailLine(job: DownloadJob): string | null {
   return parts.length > 0 ? parts.join(' · ') : null
 }
 
-function jobSize(job: DownloadJob): string {
+function jobSize(job: DownloadJob): string | null {
   if (job.output?.files[0]?.bytes != null) return formatBytes(job.output.files[0].bytes)
   if (job.progress.totalBytes !== null) return formatBytes(job.progress.totalBytes)
-  return 'Size unknown'
+  return null
+}
+
+function IconButton({
+  icon,
+  label,
+  onClick,
+  disabled = false,
+  tone = 'neutral',
+}: {
+  icon: IconName
+  label: string
+  onClick: () => void
+  disabled?: boolean
+  tone?: 'neutral' | 'stop' | 'danger'
+}) {
+  return (
+    <button
+      type="button"
+      className={`icon-button icon-button--${tone}`}
+      onClick={onClick}
+      disabled={disabled}
+      title={label}
+      aria-label={label}
+    >
+      <Icon name={icon} size={15} />
+    </button>
+  )
+}
+
+function JobActions({
+  job,
+  compact,
+  onCancel,
+  onRetry,
+  onRemove,
+  onOpenLocation,
+}: {
+  job: DownloadJob
+  compact: boolean
+  onCancel: (jobId: string) => void
+  onRetry: (jobId: string) => void
+  onRemove: (jobId: string) => void
+  onOpenLocation: (jobId: string, revealFile: boolean) => void
+}) {
+  const terminal = isTerminalStatus(job.status)
+
+  const handleClear = (): void => {
+    if (job.status === 'completed') {
+      const confirmed = window.confirm(
+        `Clear "${job.title}" from history? The downloaded file will stay on disk.`,
+      )
+      if (!confirmed) return
+    }
+    onRemove(job.id)
+  }
+
+  return (
+    <div className="job-actions">
+      {!terminal ? (
+        <IconButton
+          icon="stop"
+          label={job.status === 'cancelling' ? 'Stopping download' : `Stop ${job.title}`}
+          onClick={() => onCancel(job.id)}
+          disabled={job.status === 'cancelling'}
+          tone="stop"
+        />
+      ) : null}
+
+      {job.status === 'failed' || job.status === 'cancelled' ? (
+        <IconButton icon="refresh" label={`Restart ${job.title}`} onClick={() => onRetry(job.id)} />
+      ) : null}
+
+      {job.status === 'completed' && job.output ? (
+        <>
+          <IconButton
+            icon="folder"
+            label="Open download folder"
+            onClick={() => onOpenLocation(job.id, false)}
+          />
+          {!compact && job.output.files[0] ? (
+            <IconButton
+              icon="file"
+              label="Show downloaded file"
+              onClick={() => onOpenLocation(job.id, true)}
+            />
+          ) : null}
+        </>
+      ) : null}
+
+      {terminal ? (
+        <IconButton
+          icon="x"
+          label={job.status === 'completed' ? 'Clear from history' : 'Clear from list'}
+          onClick={handleClear}
+          tone="danger"
+        />
+      ) : null}
+    </div>
+  )
 }
 
 export function JobRow({
@@ -72,10 +172,11 @@ export function JobRow({
   onRemove: (jobId: string) => void
   onOpenLocation: (jobId: string, revealFile: boolean) => void
 }) {
-  const terminal = isTerminalStatus(job.status)
   const detail = jobDetailLine(job)
   const percent = job.progress.percent
   const showProgress = isProgressStatus(job.status)
+  const size = jobSize(job)
+  const terminal = isTerminalStatus(job.status)
   const [completionFlash, setCompletionFlash] = useState(false)
   const previousStatus = useRef(job.status)
 
@@ -88,14 +189,6 @@ export function JobRow({
     const timer = window.setTimeout(() => setCompletionFlash(false), 900)
     return () => window.clearTimeout(timer)
   }, [job.status])
-
-  const handleRemove = (): void => {
-    if (
-      window.confirm(`Remove "${job.title}" from history? Downloaded files will not be deleted.`)
-    ) {
-      onRemove(job.id)
-    }
-  }
 
   return (
     <article
@@ -114,17 +207,19 @@ export function JobRow({
               referrerPolicy="no-referrer"
             />
           ) : (
-            <Icon name="download" size={compact ? 16 : 20} />
+            <Icon name="download" size={compact ? 15 : 20} />
           )}
         </div>
         <div className="job-main">
-          <div className="job-title-line">
-            <span className={`badge job-status ${statusTone(job.status)}`}>
-              {STATUS_LABELS[job.status]}
-            </span>
-            <span className="job-engine">YouTube</span>
-            {detail ? <span className="job-detail">{detail}</span> : null}
-          </div>
+          {!compact ? (
+            <div className="job-title-line">
+              <span className={`badge job-status ${statusTone(job.status)}`}>
+                {STATUS_LABELS[job.status]}
+              </span>
+              <span className="job-engine">YouTube</span>
+              {detail ? <span className="job-detail">{detail}</span> : null}
+            </div>
+          ) : null}
           <h3 className="job-title" title={job.title}>
             {job.title}
           </h3>
@@ -146,10 +241,23 @@ export function JobRow({
           ) : null}
 
           <div className="job-meta">
-            {job.status === 'completed' ? (
-              <span>{jobSize(job)}</span>
-            ) : job.status === 'failed' || job.status === 'cancelled' ? (
-              <span>{jobSize(job)}</span>
+            {compact ? (
+              <span className={`job-state job-state--${job.status}`}>
+                <span className="job-state-dot" aria-hidden="true" />
+                {STATUS_LABELS[job.status]}
+              </span>
+            ) : null}
+
+            {terminal ? (
+              size ? (
+                <span>{size}</span>
+              ) : null
+            ) : job.status === 'queued' ? (
+              <span>Waiting for a slot</span>
+            ) : job.status === 'resolving' ? (
+              <span>Reading video info</span>
+            ) : job.status === 'cancelling' ? (
+              <span>Stopping…</span>
             ) : (
               <>
                 <span className="job-percent">
@@ -157,6 +265,12 @@ export function JobRow({
                 </span>
                 {job.progress.downloadedBytes === null ? (
                   <span>Starting…</span>
+                ) : compact ? (
+                  <span>
+                    {job.progress.totalBytes !== null
+                      ? formatBytes(job.progress.totalBytes)
+                      : `${formatBytes(job.progress.downloadedBytes)} downloaded`}
+                  </span>
                 ) : (
                   <span>
                     {formatBytes(job.progress.downloadedBytes)}
@@ -169,11 +283,12 @@ export function JobRow({
                   <span>{formatSpeed(job.progress.bytesPerSecond)}</span>
                 ) : null}
                 {job.progress.etaSeconds !== null ? (
-                  <span>ETA {formatEta(job.progress.etaSeconds)}</span>
+                  <span className="job-eta">ETA {formatEta(job.progress.etaSeconds)}</span>
                 ) : null}
               </>
             )}
-            {job.output?.files[0] ? (
+
+            {job.output?.files[0] && !compact ? (
               <span className="job-output" title={job.output.files[0].path}>
                 {job.output.files[0].path.split(/[\\/]/).pop()}
               </span>
@@ -189,60 +304,14 @@ export function JobRow({
         </div>
       </div>
 
-      <div className="job-actions">
-        {!terminal && job.status !== 'cancelling' ? (
-          <button
-            type="button"
-            className="button button--secondary button--small"
-            onClick={() => onCancel(job.id)}
-          >
-            Cancel
-          </button>
-        ) : null}
-
-        {job.status === 'failed' || job.status === 'cancelled' ? (
-          <button
-            type="button"
-            className="button button--secondary button--small"
-            onClick={() => onRetry(job.id)}
-          >
-            <Icon name="refresh" size={15} />
-            Retry
-          </button>
-        ) : null}
-
-        {job.status === 'completed' && job.output ? (
-          <>
-            <button
-              type="button"
-              className="button button--secondary button--small"
-              onClick={() => onOpenLocation(job.id, false)}
-            >
-              <Icon name="folder" size={15} />
-              Open folder
-            </button>
-            {job.output.files[0] && !compact ? (
-              <button
-                type="button"
-                className="button button--ghost button--small"
-                onClick={() => onOpenLocation(job.id, true)}
-              >
-                Show file
-              </button>
-            ) : null}
-          </>
-        ) : null}
-
-        {terminal && !compact ? (
-          <button
-            type="button"
-            className="button button--ghost button--small job-remove"
-            onClick={handleRemove}
-          >
-            Remove
-          </button>
-        ) : null}
-      </div>
+      <JobActions
+        job={job}
+        compact={compact}
+        onCancel={onCancel}
+        onRetry={onRetry}
+        onRemove={onRemove}
+        onOpenLocation={onOpenLocation}
+      />
     </article>
   )
 }
