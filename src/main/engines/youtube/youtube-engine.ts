@@ -103,6 +103,33 @@ async function findLargestOutput(workspace: string): Promise<string> {
   return best.path
 }
 
+interface StreamProgress {
+  downloadedBytes: number
+  totalBytes: number | null
+  finished: boolean
+}
+
+/**
+ * yt-dlp reports progress per output stream, so a video+audio download would
+ * otherwise reset the percentage when the second stream starts. Seed the known
+ * selected streams (and their sizes when reported) so progress can be summed
+ * from the first byte.
+ */
+function seedStreamProgress(details: EngineSelection['details']): Map<string, StreamProgress> {
+  const streams = new Map<string, StreamProgress>()
+  if (!details) return streams
+
+  for (const summary of [details.selectedVideo, details.selectedAudio]) {
+    if (!summary) continue
+    streams.set(summary.formatId, {
+      downloadedBytes: 0,
+      totalBytes: summary.sizeBytes,
+      finished: false,
+    })
+  }
+  return streams
+}
+
 export class YoutubeEngine implements DownloadEngine {
   readonly id = 'youtube'
   readonly displayName = 'YouTube'
@@ -205,22 +232,71 @@ export class YoutubeEngine implements DownloadEngine {
       ctx.emit({ type: 'phase', phase: 'processing' })
     }
 
+    const streams = seedStreamProgress(ctx.selection.details)
+    const selectedFormatIds = new Set(selection.formatIds)
+
+    const handleProgress = (formatId: string | null, progress: Record<string, unknown>): void => {
+      const finished = progress.status === 'finished'
+
+      if (formatId) {
+        const previous = streams.get(formatId)
+        const reportedDownloaded = nonNegative(progress.downloaded_bytes) ?? 0
+        // A retried fragment may report a lower byte count; keep the bar stable.
+        const downloadedBytes = Math.max(previous?.downloadedBytes ?? 0, reportedDownloaded)
+        const totalBytes =
+          nonNegative(progress.total_bytes) ??
+          nonNegative(progress.total_bytes_estimate) ??
+          previous?.totalBytes ??
+          null
+
+        streams.set(formatId, {
+          downloadedBytes: finished && totalBytes !== null ? totalBytes : downloadedBytes,
+          totalBytes,
+          finished: finished || previous?.finished === true,
+        })
+      }
+
+      let downloadedBytes = 0
+      let totalBytes: number | null = 0
+      for (const stream of streams.values()) {
+        downloadedBytes += stream.downloadedBytes
+        if (totalBytes !== null) {
+          totalBytes = stream.totalBytes === null ? null : totalBytes + stream.totalBytes
+        }
+      }
+
+      ctx.emit({
+        type: 'progress',
+        downloadedBytes,
+        totalBytes: totalBytes !== null && totalBytes > 0 ? totalBytes : null,
+        bytesPerSecond: positive(progress.speed),
+        etaSeconds: nonNegative(progress.eta),
+      })
+
+      if (
+        finished &&
+        selectedFormatIds.size > 0 &&
+        [...selectedFormatIds].every((id) => streams.get(id)?.finished === true)
+      ) {
+        emitProcessing()
+      }
+    }
+
     const handleStdout = (line: string): void => {
       if (line.startsWith('NXF_PROGRESS ')) {
         try {
-          const progress = JSON.parse(line.slice('NXF_PROGRESS '.length)) as unknown
-          if (progress && typeof progress === 'object') {
-            const record = progress as Record<string, unknown>
-            const total =
-              nonNegative(record.total_bytes) ?? nonNegative(record.total_bytes_estimate)
-            ctx.emit({
-              type: 'progress',
-              downloadedBytes: nonNegative(record.downloaded_bytes),
-              totalBytes: total,
-              bytesPerSecond: positive(record.speed),
-              etaSeconds: nonNegative(record.eta),
-            })
-            if (record.status === 'finished') emitProcessing()
+          const parsed = JSON.parse(line.slice('NXF_PROGRESS '.length)) as unknown
+          if (parsed && typeof parsed === 'object') {
+            const record = parsed as Record<string, unknown>
+            const progress = record.progress
+            if (progress && typeof progress === 'object') {
+              handleProgress(
+                typeof record.formatId === 'string' && record.formatId.length > 0
+                  ? record.formatId
+                  : null,
+                progress as Record<string, unknown>,
+              )
+            }
           }
         } catch {
           // Ignore malformed progress output; another progress line may arrive.
@@ -255,7 +331,7 @@ export class YoutubeEngine implements DownloadEngine {
       '--progress-delta',
       '0.5',
       '--progress-template',
-      'download:NXF_PROGRESS %(progress)j',
+      'download:NXF_PROGRESS {"formatId":%(info.format_id)j,"progress":%(progress)j}',
       '--progress-template',
       'postprocess:NXF_POSTPROCESS %(progress)j',
       '--print',

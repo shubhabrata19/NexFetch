@@ -123,4 +123,42 @@ describe('youtube engine', () => {
     expect(index).toBeGreaterThanOrEqual(0)
     expect(args[index + 1]).toBe('8')
   })
+
+  it('aggregates progress across the selected video and audio streams', async () => {
+    const { ctx, events, workspaceDir } = createContext()
+    const lines = [
+      'NXF_PROGRESS {"formatId":"137","progress":{"status":"downloading","downloaded_bytes":250,"total_bytes":1000,"speed":100,"eta":8}}',
+      'NXF_PROGRESS {"formatId":"137","progress":{"status":"finished","downloaded_bytes":1000,"total_bytes":1000,"speed":100,"eta":0}}',
+      'NXF_PROGRESS {"formatId":"140","progress":{"status":"downloading","downloaded_bytes":50,"total_bytes":100,"speed":20,"eta":3}}',
+      'NXF_PROGRESS {"formatId":"140","progress":{"status":"finished","downloaded_bytes":100,"total_bytes":100,"speed":20,"eta":0}}',
+    ]
+    const engine = new YoutubeEngine(
+      successfulRunner(workspaceDir, {
+        onRun: (runOptions) => {
+          for (const line of lines) runOptions.onStdoutLine?.(line)
+        },
+      }),
+    )
+
+    await engine.start(ctx.job, ctx)
+
+    const progress = events.filter(
+      (event): event is Extract<EngineEvent, { type: 'progress' }> => event.type === 'progress',
+    )
+    expect(progress.map((entry) => [entry.downloadedBytes, entry.totalBytes])).toEqual([
+      [250, 1100],
+      [1000, 1100],
+      [1050, 1100],
+      [1100, 1100],
+    ])
+
+    const processingIndex = events.findIndex(
+      (event) => event.type === 'phase' && event.phase === 'processing',
+    )
+    const videoFinishedIndex = events.findIndex(
+      (event) =>
+        event.type === 'progress' && event.downloadedBytes === 1000 && event.totalBytes === 1100,
+    )
+    expect(processingIndex).toBeGreaterThan(videoFinishedIndex)
+  })
 })

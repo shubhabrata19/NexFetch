@@ -30,8 +30,9 @@ those engines exist.
 - Separate video/audio merging through yt-dlp and FFmpeg.
 - Configurable parallel fragment connections for adaptive-stream downloads,
   with a conservative default and a per-download control in Settings.
-- Progress, speed, size, ETA, cancellation, retry, output finalization, and
-  conflict-safe filenames.
+- Monotonic aggregate progress across separate video and audio streams, plus
+  speed, size, ETA, cancellation, retry, output finalization, and conflict-safe
+  filenames.
 - ffprobe verification of resolution and audio presence before a job is marked
   complete.
 - Persistent job history and settings in local JSON stores behind repository
