@@ -184,6 +184,60 @@ describe('YouTube selection resolution', () => {
     })
   })
 
+  it('pairs the original-language audio when the video has translated tracks', () => {
+    const dubbed = youtubeFormat({
+      ...audioM4a,
+      formatId: '140-0',
+      language: 'hi',
+      languagePreference: -1,
+      bitrateKbps: 192,
+    })
+    const original = youtubeFormat({
+      ...audioM4a,
+      formatId: '140-20',
+      language: 'en',
+      languagePreference: 10,
+      bitrateKbps: 128,
+    })
+
+    const selection = resolveYoutubeSelection(preview([h2644k, dubbed, original]), {
+      mode: 'video',
+      videoFormatId: '137',
+    })
+    expect(selection.data).toMatchObject({
+      audioFormatId: '140-20',
+      selector: '137+140-20',
+      container: 'mp4',
+    })
+    expect(selection.details?.selectedAudio?.formatId).toBe('140-20')
+  })
+
+  it('uses the original-language audio for best-up-to-4K', () => {
+    const dubbed = youtubeFormat({
+      ...audioOpus,
+      formatId: '251-0',
+      language: 'hi',
+      languagePreference: -1,
+      bitrateKbps: 192,
+    })
+    const original = youtubeFormat({
+      ...audioOpus,
+      formatId: '251-20',
+      language: 'en',
+      languagePreference: 10,
+      bitrateKbps: 160,
+    })
+
+    const selection = resolveYoutubeSelection(preview([video4k, dubbed, original]), {
+      mode: 'best-up-to-4k',
+    })
+    expect(selection.data).toMatchObject({
+      videoFormatId: '313',
+      audioFormatId: '251-20',
+      selector: '313+251-20',
+    })
+  })
+
   it('supports a progressive video without FFmpeg', () => {
     const selection = resolveYoutubeSelection(preview([progressive]), {
       mode: 'video',

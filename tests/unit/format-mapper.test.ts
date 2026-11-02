@@ -89,4 +89,63 @@ describe('YouTube format mapper', () => {
     expect(formats).toHaveLength(1)
     expect(formats[0]?.height).toBe(2160)
   })
+
+  it('keeps audio-track language and language preference', () => {
+    const formats = mapYoutubeFormats([
+      raw({
+        format_id: '251-20',
+        ext: 'webm',
+        width: null,
+        height: null,
+        fps: null,
+        vcodec: 'none',
+        acodec: 'opus',
+        tbr: null,
+        abr: 160,
+        language: 'en',
+        language_preference: 10,
+        format_note: 'English original (default), medium',
+      }),
+      raw({
+        format_id: '251-0',
+        ext: 'webm',
+        width: null,
+        height: null,
+        fps: null,
+        vcodec: 'none',
+        acodec: 'opus',
+        tbr: null,
+        abr: 160,
+        language: 'hi',
+        language_preference: -1,
+        format_note: 'Hindi, medium',
+      }),
+    ])
+
+    const original = formats.find((format) => format.formatId === '251-20')
+    const dubbed = formats.find((format) => format.formatId === '251-0')
+
+    expect(original?.language).toBe('en')
+    expect(original?.languagePreference).toBe(10)
+    expect(dubbed?.language).toBe('hi')
+    expect(dubbed?.languagePreference).toBe(-1)
+  })
+
+  it('ignores malformed language codes', () => {
+    const [format] = mapYoutubeFormats([
+      raw({
+        format_id: '140',
+        ext: 'm4a',
+        width: null,
+        height: null,
+        fps: null,
+        vcodec: 'none',
+        acodec: 'mp4a.40.2',
+        tbr: null,
+        abr: 128,
+        language: 'not a code',
+      }),
+    ])
+    expect(format?.language).toBeNull()
+  })
 })

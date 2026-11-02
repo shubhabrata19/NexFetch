@@ -27,6 +27,8 @@ export const rawYtDlpFormatSchema = z
     dynamic_range: z.string().nullish(),
     format_note: z.string().nullish(),
     protocol: z.string().nullish(),
+    language: z.string().nullish(),
+    language_preference: numberish,
   })
   .passthrough()
 

@@ -21,6 +21,12 @@ export interface VideoFormat {
   dynamicRange: 'SDR' | 'HDR' | null
   hasVideo: boolean
   hasAudio: boolean
+  /**
+   * Extractor-provided preference for this audio track. yt-dlp reports 10 for
+   * the original language, 5 for the uploader's default, and -1/-10 otherwise,
+   * so a higher value always means "closer to the original".
+   */
+  languagePreference?: number | null
 }
 
 export interface QualityPolicyOptions {
@@ -52,6 +58,10 @@ function normalizedHeight(format: VideoFormat): number {
   return format.height ?? 0
 }
 
+function normalizedLanguagePreference(format: VideoFormat): number {
+  return format.languagePreference ?? -1
+}
+
 function isH264(format: VideoFormat): boolean {
   const codec = format.videoCodec?.toLowerCase() ?? ''
   return codec.includes('avc') || codec.includes('h264')
@@ -80,6 +90,9 @@ function compareAudio(
   const aPreferred = preferredExtensions.includes(a.ext) ? 1 : 0
   const bPreferred = preferredExtensions.includes(b.ext) ? 1 : 0
   return (
+    // Language beats codec/bitrate: a video with translated tracks must never
+    // silently fall back to a dub just because it has a higher bitrate.
+    normalizedLanguagePreference(b) - normalizedLanguagePreference(a) ||
     bPreferred - aPreferred ||
     normalizedBitrate(b) - normalizedBitrate(a) ||
     (b.sizeBytes ?? 0) - (a.sizeBytes ?? 0) ||
@@ -95,6 +108,11 @@ export function isEligibleVideoFormat(format: VideoFormat): boolean {
 
 export function isAudioOnlyFormat(format: VideoFormat): boolean {
   return format.hasAudio && !format.hasVideo
+}
+
+/** True when the extractor identified this stream as the original-language audio. */
+export function isOriginalAudioFormat(format: VideoFormat): boolean {
+  return normalizedLanguagePreference(format) >= 10
 }
 
 export function selectBestVideo<TFormat extends VideoFormat>(

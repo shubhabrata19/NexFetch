@@ -11,6 +11,7 @@ import type {
   YoutubeSelection,
 } from '@shared/domain/youtube'
 import { classifyYoutubeInput } from '@shared/domain/youtube-url'
+import { isOriginalAudioFormat } from '@shared/domain/quality'
 import { Icon } from '../../components/Icon'
 import {
   formatBytes,
@@ -92,6 +93,9 @@ function FormatBadges({ format }: { format: YoutubeFormat }) {
       ) : null}
       {format.hasAudio && !format.hasVideo ? (
         <span className="badge badge--neutral">Audio only</span>
+      ) : null}
+      {isOriginalAudioFormat(format) ? (
+        <span className="badge badge--accent">Original audio</span>
       ) : null}
       {format.fps !== null && format.fps >= 50 ? (
         <span className="badge badge--neutral">{Math.round(format.fps)} FPS</span>
@@ -206,6 +210,10 @@ export function YoutubeDownloadPanel({
   const videoFormats = preview?.formats.filter((format) => format.hasVideo) ?? []
   const audioFormats =
     preview?.formats.filter((format) => format.hasAudio && !format.hasVideo) ?? []
+  // Multi-language videos report every dub as its own audio format. Only offer
+  // the original-language tracks; fall back to all tracks when none is marked.
+  const originalAudioFormats = audioFormats.filter(isOriginalAudioFormat)
+  const listedAudioFormats = originalAudioFormats.length > 0 ? originalAudioFormats : audioFormats
   const maxVideoHeight = videoFormats.reduce(
     (maximum, format) => Math.max(maximum, format.height ?? 0),
     0,
@@ -458,7 +466,7 @@ export function YoutubeDownloadPanel({
                     </span>
                     {preview.bestUpTo4k.requiresFfmpeg ? (
                       <span className="best-choice-note">
-                        Adaptive video · audio added automatically
+                        Adaptive video · original audio added automatically
                       </span>
                     ) : null}
                   </span>
@@ -502,15 +510,20 @@ export function YoutubeDownloadPanel({
               </div>
 
               <p className="format-note">
-                Adaptive video · audio added automatically. Sizes appear when YouTube reports them;
-                the actual size is confirmed after download.
+                Adaptive video · original audio added automatically. Sizes appear when YouTube
+                reports them; the actual size is confirmed after download.
               </p>
 
               {preview.audioOnlyAvailable && audioFormats.length > 0 ? (
                 <div className="audio-section">
                   <h4>Audio only</h4>
+                  {originalAudioFormats.length > 0 ? (
+                    <p className="format-note">
+                      Original-language audio only. Translated audio tracks are not listed.
+                    </p>
+                  ) : null}
                   <div className="format-list" role="radiogroup" aria-label="Audio formats">
-                    {audioFormats.map((format) => {
+                    {listedAudioFormats.map((format) => {
                       const selected =
                         selection.mode === 'audio' && selection.audioFormatId === format.formatId
                       return (
@@ -576,7 +589,7 @@ export function YoutubeDownloadPanel({
             <span className="download-action-title">{selectedSummary}</span>
             <span className="download-action-note">
               {selectedAdaptive
-                ? 'Adaptive video · audio added automatically'
+                ? 'Adaptive video · original audio added automatically'
                 : selection.mode === 'audio'
                   ? 'Native audio download'
                   : 'Video and audio included'}

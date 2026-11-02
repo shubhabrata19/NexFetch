@@ -15,6 +15,8 @@ export interface YoutubeFormat extends VideoFormat {
   resolutionLabel: string
   note: string | null
   protocol: string | null
+  /** BCP-47-ish language code reported for an audio track, e.g. "en". */
+  language?: string | null
 }
 
 export interface YoutubeBestChoice {

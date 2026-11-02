@@ -27,6 +27,8 @@ those engines exist.
 - Metadata extraction through yt-dlp with bounded output and timeouts.
 - Actual format mapping up to 2160p; 8K is never offered.
 - “Best available up to 4K,” manual video selection, and audio-only selection.
+- Original-language audio is selected automatically for videos with translated
+  audio tracks; dubbed tracks are never picked implicitly.
 - Separate video/audio merging through yt-dlp and FFmpeg.
 - Configurable parallel fragment connections and a per-download speed limit,
   with both controls in Settings.

@@ -26,6 +26,11 @@ function resolutionLabel(height: number | null, fps: number | null): string {
   return `${height}p${fps !== null && fps >= 50 ? Math.round(fps) : ''}`
 }
 
+function languageCode(value: string | null | undefined): string | null {
+  const code = value?.trim()
+  return code && /^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$/.test(code) ? code : null
+}
+
 function compareFormats(a: YoutubeFormat, b: YoutubeFormat): number {
   if (a.hasVideo !== b.hasVideo) return a.hasVideo ? -1 : 1
   if (a.hasVideo) {
@@ -91,6 +96,8 @@ export function mapYoutubeFormats(rawFormats: readonly RawYtDlpFormat[]): Youtub
       resolutionLabel: resolution,
       note,
       protocol: raw.protocol ?? null,
+      language: languageCode(raw.language),
+      languagePreference: numberOrNull(raw.language_preference),
     }
 
     seen.add(raw.format_id)

@@ -165,6 +165,50 @@ describe('4K quality policy', () => {
     expect(choice?.video).toBeNull()
   })
 
+  it('prefers original-language audio over a higher-bitrate dub', () => {
+    const dubbed = format({
+      ...audioOpus,
+      formatId: '251-0',
+      bitrateKbps: 200,
+      sizeBytes: 20,
+      languagePreference: -1,
+    })
+    const original = format({
+      ...audioM4a,
+      formatId: '140-20',
+      bitrateKbps: 128,
+      languagePreference: 10,
+    })
+
+    expect(selectBestAudioOnly([dubbed, original])?.audio?.formatId).toBe('140-20')
+  })
+
+  it('pairs the original-language audio with an H.264 video', () => {
+    const video = format({
+      formatId: '137',
+      height: 2160,
+      width: 3840,
+      videoCodec: 'avc1.640033',
+      sizeBytes: 500,
+    })
+    const dubbed = format({
+      ...audioM4a,
+      formatId: '140-0',
+      bitrateKbps: 192,
+      languagePreference: -1,
+    })
+    const original = format({
+      ...audioM4a,
+      formatId: '140-20',
+      bitrateKbps: 128,
+      languagePreference: 10,
+    })
+
+    const choice = selectBestUpTo4k([video, dubbed, original])
+    expect(choice?.audio?.formatId).toBe('140-20')
+    expect(choice?.predictedContainer).toBe('mp4')
+  })
+
   it('returns null when there is no eligible video', () => {
     const eightK = format({ height: 4320, width: 7680 })
     expect(selectBestUpTo4k([eightK, audioM4a])).toBeNull()
