@@ -4,7 +4,7 @@ NexFetch is a modern desktop download manager designed to grow from a focused
 YouTube downloader into a universal download manager with independent protocol
 engines.
 
-This repository currently contains the **universal manager core** with two
+This repository currently contains the **universal manager core** with three
 working engines:
 
 - Secure Electron shell with strongly typed IPC.
@@ -12,6 +12,9 @@ working engines:
   quality-first 4K selection.
 - Direct HTTP/HTTPS downloads with redirects, Range resume, pause/resume,
   optional SHA-256 verification, and unknown-length support.
+- BitTorrent through a bundled libtorrent 2.x helper: `.torrent` files and v1/v2
+  info hashes, DHT/PEX/LSD, tracker tiers, file selection, pause/resume,
+  per-torrent speed limits, seeding controls, and peer/tracker detail.
 - SQLite-backed job and settings persistence with automatic JSON migration.
 - Real download queue with scheduling, progress, cancellation, retry,
   completion, and history filters.
@@ -21,8 +24,8 @@ working engines:
 - ffprobe verification of merged YouTube output.
 - Bundled yt-dlp/FFmpeg binary detection for packaged builds.
 
-BitTorrent remains a later phase. Its controls are not shown until that engine
-exists.
+Magnet links are intentionally not accepted. BitTorrent input is a local
+`.torrent` file or a v1/v2 info hash resolved through DHT.
 
 ## Current status
 
@@ -72,7 +75,6 @@ Not implemented yet:
 
 - User-facing pause/resume for YouTube downloads.
 - Playlist/channel/live-stream downloads.
-- BitTorrent engine.
 - Notifications and auto-update.
 - Proxy configuration, custom headers, cookies, or authenticated HTTP downloads.
 - Public third-party plugins or a marketplace.
@@ -99,6 +101,7 @@ The first release is quality-first:
   - `yt-dlp`
   - `ffmpeg`
   - `ffprobe`
+- Python 3.12 (development only, to build the torrent helper).
 
 SQLite is embedded through Electron's built-in `node:sqlite` module. There is no
 database server, daemon, port, or native module to rebuild.
@@ -109,14 +112,21 @@ Packaged builds use bundled binaries from `resources/bin` and do not trust
 renderer-provided executable paths.
 
 `resources/bin/` is intentionally ignored by Git because the binaries are large.
-On Windows, `npm run fetch:win-binaries` downloads a development copy. For local
-development, place the tools in:
+On Windows, `npm run fetch:win-binaries` downloads a development copy. Build the
+torrent helper once with:
+
+```bash
+npm run build:torrent-helper
+```
+
+For local development, the binaries live in:
 
 ```text
 resources/bin/win32-x64/
   yt-dlp.exe
   ffmpeg.exe
   ffprobe.exe
+  nexfetch-torrent-helper.exe
 ```
 
 The release build includes that directory through `extraResources`. Before a
@@ -137,6 +147,7 @@ npm run format:check # verify formatting
 npm run build        # production build into out/
 npm run package      # unpacked application with resources
 npm run package:win  # Windows installer
+npm run build:torrent-helper # build the libtorrent helper executable
 npm run icons        # regenerate platform icons
 ```
 
@@ -145,14 +156,14 @@ npm run icons        # regenerate platform icons
 The current Windows review build is produced with:
 
 ```bash
-npx electron-builder --win nsis -c.directories.output=release/v0.4.0
+npx electron-builder --win nsis -c.directories.output=release/v0.5.0
 ```
 
 Outputs:
 
 ```text
-release/v0.4.0/NexFetch Setup 0.4.0.exe
-release/v0.4.0/win-unpacked/NexFetch.exe
+release/v0.5.0/NexFetch Setup 0.5.0.exe
+release/v0.5.0/win-unpacked/NexFetch.exe
 ```
 
 The installer is currently unsigned, so Windows SmartScreen may warn. The
@@ -161,15 +172,25 @@ brand asset from `resources/assets`.
 
 ## Interface
 
-- The downloads workspace has YouTube and Direct file tabs. Both keep the URL
-  flow, preview, pinned download action, and activity queue visible together.
+- The downloads workspace has YouTube, Direct file, and Torrent tabs. All keep
+  the input, preview, pinned action, and activity queue visible together.
+- Torrent intake accepts a dropped or chosen `.torrent` file, or a v1/v2 info
+  hash. Successful input redirects to the dedicated Torrents page in Setup mode.
+- The Torrents page is a master–detail client with Setup, Downloading, Seeding,
+  and Completed groups; files, peers, trackers, and discovery tabs; seeds/peers
+  connected-versus-available counts; live download/upload speed; per-torrent
+  limits; and explicit stop-seeding controls.
+- Closing the window while transfers are active offers Continue in Background
+  (tray) or Close NexFetch. Unfinished downloads resume next launch; seeding
+  stops and does not resume automatically.
 - Direct file previews show the final host, filename, content type, reported
   size, resume support, an optional SHA-256 checksum, and an optional start time.
 - The activity rail shows compact cards with a two-line title, status, percent,
   speed, downloaded/total size, ETA, and progress bar. Actions use icon buttons
   for pause/resume where supported, stop, restart, open folder, and clear.
 - Direct downloads expose pause and resume. YouTube jobs expose cancel and retry.
-- History filters records by All, Files, or Videos without deleting output files.
+- History filters records by All, Files, Videos, or Torrents without deleting
+  output files.
 - The sidebar shows up to two active downloads with thumbnails, progress, speed,
   and stop controls. When idle it collapses to a single “No active downloads”
   line.
@@ -204,7 +225,8 @@ explicit light or dark preference, and Settings offers System, Light, and Dark.
 src/
   main/       Electron main process, IPC, services, engine registry, queue
     download/ job manager, preview cache, generic preview service
-    engines/  YouTube and HTTP/HTTPS adapters
+    engines/  YouTube, HTTP/HTTPS, and libtorrent adapter
+  tools/torrent-helper/  Python libtorrent JSON-lines helper
     storage/  SQLite schema, repositories, JSON migration
   preload/    narrow contextBridge API
   renderer/   React UI
@@ -222,6 +244,8 @@ resources/    bundled binaries and licenses (binaries ignored by Git)
 - Engines own protocol behavior; the core owns jobs, queueing, persistence,
   workspace cleanup, verification, and UI events.
 - Engine-specific data stays in typed engine metadata, not the common job shape.
+- The torrent helper is a separate process with a narrow JSON-lines protocol;
+  it never exposes a localhost web API.
 - Child processes use argument arrays and `shell: false`; no user-controlled
   values are interpolated into shell strings.
 - No dynamic plugin loader or public plugin marketplace is planned for the early
@@ -240,19 +264,31 @@ resources/    bundled binaries and licenses (binaries ignored by Git)
   are validated before appending to a partial file.
 - Output paths remain inside the user-selected destination.
 - Filename conflicts are resolved without silent overwrites.
+- Torrent metadata is treated as untrusted: file paths, tracker URLs, file
+  counts, and metadata size are validated before a job is created.
+- Tracker URLs are limited to HTTP/HTTPS/UDP from the `.torrent`; trackers that
+  resolve to private or local hosts are rejected. Web seeds are disabled.
+- Protocol encryption is enabled; DHT/PEX/LSD are automatically disabled for
+  private torrents.
+- Router port mapping uses NAT-PMP/UPnP only when enabled in Settings, maps one
+  temporary port, and removes it on exit.
+- Info hashes and magnet-style identifiers are never written to logs.
 - No cookies, credentials, DRM circumvention, paywall bypass, private-video
   access, or geo-bypass is supported.
 - Logs are local and redacted; no telemetry is sent.
 
 ## Next milestone
 
-Phase 3 is implemented. The remaining release work is:
+The torrent client is implemented. The remaining release work is:
 
 1. Run packaged-app smoke tests on Windows, macOS, and Linux, including automatic
-   JSON-to-SQLite migration.
-2. Add code signing and a reproducible release workflow.
-3. Harden very large direct downloads and sleep/network-change recovery.
-4. Plan the BitTorrent engine spike and library decision record.
+   JSON-to-SQLite migration and the bundled torrent helper.
+2. Add code signing and a reproducible release workflow for the Electron app and
+   the torrent helper.
+3. Harden large-swarm resource use, sleep/network-change recovery, and
+   cross-platform libtorrent packaging.
+4. Add automated end-to-end tests with a local legal swarm; keep public swarms out
+   of routine CI.
 
 See `.opencode/agents/` and `.opencode/skills/` for the project-specific
 architecture, UI, download-engine, torrent, and release guidance.

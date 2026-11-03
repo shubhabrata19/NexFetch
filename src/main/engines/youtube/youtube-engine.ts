@@ -34,9 +34,11 @@ type Runner = typeof runProcess
 const CAPABILITIES: EngineCapabilities = {
   preview: true,
   selectableFormats: true,
+  fileSelection: false,
   audioOnly: true,
   pauseResume: false,
   resumeAfterRestart: false,
+  directOutput: false,
   checksumVerification: false,
   seeding: false,
   liveSpeed: true,

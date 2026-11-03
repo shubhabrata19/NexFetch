@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import type {
   CreateJobRequest,
   DependencyStatus,
@@ -8,6 +7,7 @@ import type {
 } from '@shared/ipc/contracts'
 import { QueuePanel } from '../../components/QueuePanel'
 import { HttpDownloadPanel } from '../http/HttpDownloadPanel'
+import { TorrentDownloadPanel } from '../torrent/TorrentDownloadPanel'
 import { YoutubeDownloadPanel } from '../youtube/YoutubeDownloadPanel'
 
 interface DownloadsPageProps {
@@ -15,10 +15,15 @@ interface DownloadsPageProps {
   dependencies: DependencyStatus | null
   engines: EngineInfo[]
   jobs: DownloadJob[]
+  source: SourceTab
+  onSourceChange: (source: SourceTab) => void
   onCreateJob: (request: CreateJobRequest) => Promise<DownloadJob | null>
+  onCreateTorrent: (request: CreateJobRequest) => Promise<DownloadJob | null>
+  onOpenTorrent: (jobId: string) => void
   onCancelJob: (jobId: string) => void
   onPauseJob: (jobId: string) => void
   onResumeJob: (jobId: string) => void
+  onStopSeeding: (jobId: string) => void
   onRetryJob: (jobId: string) => void
   onRemoveJob: (jobId: string) => void
   onOpenJobLocation: (jobId: string, revealFile: boolean) => void
@@ -27,17 +32,22 @@ interface DownloadsPageProps {
   onViewHistory: () => void
 }
 
-type SourceTab = 'youtube' | 'http'
+export type SourceTab = 'youtube' | 'http' | 'torrent'
 
 export function DownloadsPage({
   settings,
   dependencies,
   engines,
   jobs,
+  source,
+  onSourceChange,
   onCreateJob,
+  onCreateTorrent,
+  onOpenTorrent,
   onCancelJob,
   onPauseJob,
   onResumeJob,
+  onStopSeeding,
   onRetryJob,
   onRemoveJob,
   onOpenJobLocation,
@@ -45,8 +55,6 @@ export function DownloadsPage({
   onOpenSettings,
   onViewHistory,
 }: DownloadsPageProps) {
-  const [source, setSource] = useState<SourceTab>('youtube')
-
   return (
     <div className="page page--downloads">
       <header className="page-header">
@@ -54,8 +62,8 @@ export function DownloadsPage({
           <p className="eyebrow">Workspace</p>
           <h1>Downloads</h1>
           <p className="page-subtitle">
-            Download a YouTube video at the best available quality up to 4K, or fetch a direct
-            HTTP/HTTPS file.
+            Download YouTube at the best available quality up to 4K, fetch a direct file, or add a
+            torrent.
           </p>
         </div>
         <span className="badge badge--neutral">
@@ -71,7 +79,7 @@ export function DownloadsPage({
               role="tab"
               aria-selected={source === 'youtube'}
               className={`source-tab${source === 'youtube' ? ' source-tab--active' : ''}`}
-              onClick={() => setSource('youtube')}
+              onClick={() => onSourceChange('youtube')}
             >
               YouTube
             </button>
@@ -80,9 +88,18 @@ export function DownloadsPage({
               role="tab"
               aria-selected={source === 'http'}
               className={`source-tab${source === 'http' ? ' source-tab--active' : ''}`}
-              onClick={() => setSource('http')}
+              onClick={() => onSourceChange('http')}
             >
               Direct file
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={source === 'torrent'}
+              className={`source-tab${source === 'torrent' ? ' source-tab--active' : ''}`}
+              onClick={() => onSourceChange('torrent')}
+            >
+              Torrent
             </button>
           </div>
 
@@ -93,8 +110,16 @@ export function DownloadsPage({
               onCreateJob={onCreateJob}
               onOpenSettings={onOpenSettings}
             />
-          ) : (
+          ) : source === 'http' ? (
             <HttpDownloadPanel settings={settings} onCreateJob={onCreateJob} />
+          ) : (
+            <TorrentDownloadPanel
+              settings={settings}
+              dependencies={dependencies}
+              jobs={jobs}
+              onCreateTorrent={onCreateTorrent}
+              onOpenTorrent={onOpenTorrent}
+            />
           )}
         </div>
 
@@ -104,6 +129,7 @@ export function DownloadsPage({
           onCancel={onCancelJob}
           onPause={onPauseJob}
           onResume={onResumeJob}
+          onStopSeeding={onStopSeeding}
           onRetry={onRetryJob}
           onRemove={onRemoveJob}
           onOpenLocation={onOpenJobLocation}

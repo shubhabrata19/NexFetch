@@ -20,7 +20,9 @@ const STATUS_PRIORITY: Record<string, number> = {
 
 function activeJobs(jobs: DownloadJob[]): DownloadJob[] {
   return jobs
-    .filter((job) => isActiveStatus(job.status))
+    .filter(
+      (job) => isActiveStatus(job.status) && job.status !== 'setup' && job.status !== 'seeding',
+    )
     .sort((a, b) => {
       const priority = (STATUS_PRIORITY[a.status] ?? 9) - (STATUS_PRIORITY[b.status] ?? 9)
       return priority !== 0 ? priority : a.createdAt.localeCompare(b.createdAt)

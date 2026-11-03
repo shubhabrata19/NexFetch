@@ -6,14 +6,28 @@ import { isAbsolute } from 'node:path'
 import type { ZodType } from 'zod'
 import { DomainError } from '@shared/domain/errors'
 import type { ErrorCode } from '@shared/domain/errors'
-import type { AppInfo, DownloadJob, EngineInfo, Result } from '@shared/ipc/contracts'
+import type {
+  AppInfo,
+  DownloadJob,
+  EngineInfo,
+  Result,
+  TorrentLimitsRequest,
+  TorrentSetupUpdateRequest,
+} from '@shared/ipc/contracts'
 import { IPC } from '@shared/ipc/channels'
+import { parseTorrentInfoHash } from '@shared/domain/torrent-hash'
 import {
   createJobRequestSchema,
   jobIdRequestSchema,
   openLocationRequestSchema,
   previewCancelSchema,
   previewRequestSchema,
+  torrentBytesPreviewRequestSchema,
+  torrentCancelPreviewSchema,
+  torrentInfoHashSchema,
+  torrentLimitsRequestSchema,
+  torrentPreviewRequestSchema,
+  torrentSetupUpdateSchema,
   youtubeCancelPreviewSchema,
   youtubePreviewRequestSchema,
 } from '@shared/validation/jobs'
@@ -21,6 +35,7 @@ import { settingsPatchSchema } from '@shared/validation/settings'
 import type { DownloadManager } from '../download/download-manager'
 import type { PreviewService } from '../download/preview-service'
 import type { YoutubePreviewService } from '../download/youtube-preview-service'
+import type { TorrentPreviewService } from '../engines/torrent/torrent-preview-service'
 import type { EngineRegistry } from '../engines/registry'
 import type { DependencyService } from '../services/dependency-service'
 import type { Logger } from '../services/logger'
@@ -32,6 +47,7 @@ interface IpcDependencies {
   dependencies: DependencyService
   previewService: PreviewService
   youtubePreview: YoutubePreviewService
+  torrentPreview: TorrentPreviewService
   registry: EngineRegistry
   downloadManager: DownloadManager
   logger: Logger
@@ -51,14 +67,24 @@ const INVOKE_CHANNELS = [
   IPC.enginesList,
   IPC.youtubePreview,
   IPC.youtubeCancelPreview,
+  IPC.torrentChooseFile,
+  IPC.torrentPreviewBytes,
+  IPC.torrentPreviewInfoHash,
+  IPC.torrentCancelPreview,
   IPC.jobsCreate,
+  IPC.jobsStartSetup,
   IPC.jobsList,
   IPC.jobsCancel,
   IPC.jobsRetry,
   IPC.jobsPause,
   IPC.jobsResume,
+  IPC.jobsStartSeeding,
+  IPC.jobsStopSeeding,
   IPC.jobsRemove,
   IPC.jobsOpenLocation,
+  IPC.torrentsSetLimits,
+  IPC.torrentsFindMorePeers,
+  IPC.torrentsVerify,
 ] as const
 
 function success<T>(data: T): Result<T> {
@@ -91,12 +117,14 @@ export function registerIpc(dependencies: IpcDependencies): () => void {
     dependencies: dependencyService,
     previewService,
     youtubePreview,
+    torrentPreview,
     registry,
     downloadManager,
     logger,
   } = dependencies
   const previewControllers = new Map<string, AbortController>()
   const sourcePreviewControllers = new Map<string, AbortController>()
+  const torrentPreviewControllers = new Map<string, AbortController>()
 
   const isTrustedSender = (event: IpcMainInvokeEvent): boolean => {
     const window = getWindow()
@@ -236,6 +264,7 @@ export function registerIpc(dependencies: IpcDependencies): () => void {
         ytDlp: status.ytDlp.state,
         ffmpeg: status.ffmpeg.state,
         ffprobe: status.ffprobe.state,
+        torrentHelper: status.torrentHelper.state,
       })
       return status
     },
@@ -295,7 +324,76 @@ export function registerIpc(dependencies: IpcDependencies): () => void {
     return null
   })
 
+  handle<void, Awaited<ReturnType<TorrentPreviewService['previewFile']>> | null>(
+    IPC.torrentChooseFile,
+    null,
+    async () => {
+      const window = getWindow()
+      if (!window) throw new DomainError('INTERNAL_ERROR', 'The application window is unavailable.')
+      const result = await dialog.showOpenDialog(window, {
+        title: 'Open a .torrent file',
+        properties: ['openFile'],
+        filters: [{ name: 'Torrent files', extensions: ['torrent'] }],
+      })
+      if (result.canceled || result.filePaths.length === 0) return null
+      const path = result.filePaths[0]
+      if (!path) return null
+      const requestId = randomUUID()
+      const controller = new AbortController()
+      torrentPreviewControllers.set(requestId, controller)
+      try {
+        return await torrentPreview.previewFile(path, controller.signal)
+      } finally {
+        torrentPreviewControllers.delete(requestId)
+      }
+    },
+  )
+
+  handle(IPC.torrentPreviewBytes, torrentBytesPreviewRequestSchema, async (request) => {
+    const controller = new AbortController()
+    torrentPreviewControllers.set(request.requestId, controller)
+    try {
+      return await torrentPreview.previewBytes(request.name, request.dataBase64, controller.signal)
+    } finally {
+      torrentPreviewControllers.delete(request.requestId)
+    }
+  })
+
+  handle(IPC.torrentPreviewInfoHash, torrentPreviewRequestSchema, async (request) => {
+    const parsed = parseTorrentInfoHash(torrentInfoHashSchema.parse(request.infoHash))
+    if (!parsed) {
+      throw new DomainError(
+        'TORRENT_INVALID',
+        'Enter a valid v1 (40 hex / 32 base32) or v2 (64 hex) info hash.',
+      )
+    }
+    const controller = new AbortController()
+    torrentPreviewControllers.set(request.requestId, controller)
+    try {
+      return await torrentPreview.previewInfoHash(
+        parsed.infoHash,
+        parsed.version,
+        controller.signal,
+        (progress) => {
+          getWindow()?.webContents.send(IPC.torrentPreviewProgress, progress)
+        },
+      )
+    } finally {
+      torrentPreviewControllers.delete(request.requestId)
+    }
+  })
+
+  handle(IPC.torrentCancelPreview, torrentCancelPreviewSchema, ({ requestId }) => {
+    torrentPreviewControllers.get(requestId)?.abort()
+    torrentPreviewControllers.delete(requestId)
+    return null
+  })
+
   handle(IPC.jobsCreate, createJobRequestSchema, (request) => downloadManager.createJob(request))
+
+  handle(IPC.jobsStartSetup, torrentSetupUpdateSchema, (request) =>
+    downloadManager.startSetup(request as TorrentSetupUpdateRequest),
+  )
 
   handle<void, DownloadJob[]>(IPC.jobsList, null, () => downloadManager.listJobs())
 
@@ -307,6 +405,28 @@ export function registerIpc(dependencies: IpcDependencies): () => void {
 
   handle(IPC.jobsResume, jobIdRequestSchema, ({ jobId }) => downloadManager.resumeJob(jobId))
 
+  handle(IPC.jobsStartSeeding, jobIdRequestSchema, ({ jobId }) =>
+    downloadManager.startSeeding(jobId),
+  )
+
+  handle(IPC.jobsStopSeeding, jobIdRequestSchema, ({ jobId }) => downloadManager.stopSeeding(jobId))
+
+  handle(IPC.torrentsSetLimits, torrentLimitsRequestSchema, (request) =>
+    downloadManager.setTorrentLimits(
+      (request as TorrentLimitsRequest).jobId,
+      (request as TorrentLimitsRequest).downloadLimitBytesPerSecond,
+      (request as TorrentLimitsRequest).uploadLimitBytesPerSecond,
+    ),
+  )
+
+  handle(IPC.torrentsFindMorePeers, jobIdRequestSchema, ({ jobId }) =>
+    downloadManager.findMorePeers(jobId),
+  )
+
+  handle(IPC.torrentsVerify, jobIdRequestSchema, ({ jobId }) =>
+    downloadManager.verifyTorrent(jobId),
+  )
+
   handle(IPC.jobsRemove, jobIdRequestSchema, async ({ jobId }) => {
     await downloadManager.removeJob(jobId)
     return null
@@ -317,7 +437,7 @@ export function registerIpc(dependencies: IpcDependencies): () => void {
     if (!job) throw new DomainError('INVALID_REQUEST', 'The download job was not found.')
 
     if (job.output) {
-      if (revealFile && job.output.files[0]) {
+      if (revealFile && job.output.files.length === 1 && job.output.files[0]) {
         shell.showItemInFolder(job.output.files[0].path)
         return null
       }
@@ -343,6 +463,8 @@ export function registerIpc(dependencies: IpcDependencies): () => void {
     previewControllers.clear()
     for (const controller of sourcePreviewControllers.values()) controller.abort()
     sourcePreviewControllers.clear()
+    for (const controller of torrentPreviewControllers.values()) controller.abort()
+    torrentPreviewControllers.clear()
     for (const channel of INVOKE_CHANNELS) ipcMain.removeHandler(channel)
   }
 }

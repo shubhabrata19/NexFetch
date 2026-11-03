@@ -5,7 +5,15 @@ import tseslint from 'typescript-eslint'
 
 export default tseslint.config(
   {
-    ignores: ['out/**', 'release/**', 'dist/**', 'coverage/**', 'node_modules/**'],
+    ignores: [
+      'out/**',
+      'release/**',
+      'dist/**',
+      'coverage/**',
+      'node_modules/**',
+      '.venv-torrent-helper/**',
+      'tools/torrent-helper/**',
+    ],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

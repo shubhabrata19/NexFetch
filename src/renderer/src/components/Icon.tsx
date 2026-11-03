@@ -1,5 +1,6 @@
 export type IconName =
   | 'download'
+  | 'torrent'
   | 'history'
   | 'settings'
   | 'folder'
@@ -44,6 +45,17 @@ export function Icon({ name, size = 18, className }: IconProps) {
           <path d="M12 3v11" />
           <path d="m7.5 9.5 4.5 4.5 4.5-4.5" />
           <path d="M5 21h14" />
+        </svg>
+      )
+    case 'torrent':
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="5" r="2.2" />
+          <circle cx="5" cy="18" r="2.2" />
+          <circle cx="19" cy="18" r="2.2" />
+          <path d="M12 7.2v4.3" />
+          <path d="m10.4 17.2-3.2-2.6" />
+          <path d="m13.6 17.2 3.2-2.6" />
         </svg>
       )
     case 'history':

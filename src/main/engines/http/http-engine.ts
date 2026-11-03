@@ -36,9 +36,11 @@ import {
 const CAPABILITIES: EngineCapabilities = {
   preview: true,
   selectableFormats: false,
+  fileSelection: false,
   audioOnly: false,
   pauseResume: true,
   resumeAfterRestart: true,
+  directOutput: false,
   checksumVerification: true,
   seeding: false,
   liveSpeed: true,

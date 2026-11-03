@@ -1,8 +1,9 @@
-import { app, nativeTheme, session } from 'electron'
+import { app, dialog, Menu, nativeImage, nativeTheme, session, Tray } from 'electron'
 import type { BrowserWindow } from 'electron'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { IPC } from '@shared/ipc/channels'
+import type { DownloadJob } from '@shared/domain/job'
 import { DownloadManager } from './download/download-manager'
 import { PreviewCache } from './download/preview-cache'
 import { PreviewService } from './download/preview-service'
@@ -10,6 +11,9 @@ import { YoutubePreviewService } from './download/youtube-preview-service'
 import { HttpEngine } from './engines/http/http-engine'
 import { EngineRegistry } from './engines/registry'
 import { YoutubeEngine } from './engines/youtube/youtube-engine'
+import { TorrentHelperClient } from './engines/torrent/helper-client'
+import { TorrentEngine } from './engines/torrent/torrent-engine'
+import { TorrentPreviewService } from './engines/torrent/torrent-preview-service'
 import { registerIpc } from './ipc/register-ipc'
 import { createAppMenu } from './menu'
 import { configureSession, hardenWebContents } from './security'
@@ -31,21 +35,212 @@ app.setName('NexFetch')
 app.enableSandbox()
 
 let mainWindow: BrowserWindow | null = null
+let tray: Tray | null = null
 let logger: Logger | null = null
 let downloadManager: DownloadManager | null = null
 let database: SqliteDatabase | null = null
 let disposeIpc: (() => void) | null = null
+let disposeEngines: (() => Promise<void>) | null = null
 let shuttingDown = false
+let isQuitting = false
+let quitPromptOpen = false
 
 function getMainWindow(): BrowserWindow | null {
   return mainWindow
 }
 
-function focusMainWindow(): void {
-  if (!mainWindow) return
+function iconPath(): string {
+  return app.isPackaged
+    ? join(process.resourcesPath, 'assets', 'nexfetch_icon.png')
+    : join(process.cwd(), 'resources', 'assets', 'nexfetch_icon.png')
+}
+
+function showMainWindow(): void {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    if (!logger) return
+    mainWindow = createMainWindow(isDev, logger)
+    attachWindowCloseHandler(mainWindow)
+    return
+  }
   if (mainWindow.isMinimized()) mainWindow.restore()
   mainWindow.show()
   mainWindow.focus()
+  destroyTray()
+}
+
+function focusMainWindow(): void {
+  showMainWindow()
+}
+
+function activeTransfers(): DownloadJob[] {
+  if (!downloadManager) return []
+  return downloadManager
+    .listJobs()
+    .filter(
+      (job) =>
+        job.status !== 'setup' &&
+        job.status !== 'paused' &&
+        job.status !== 'completed' &&
+        job.status !== 'failed' &&
+        job.status !== 'cancelled',
+    )
+}
+
+function transferSummary(): { active: number; seeding: number } {
+  const jobs = activeTransfers()
+  return {
+    active: jobs.filter((job) => job.status !== 'seeding').length,
+    seeding: jobs.filter((job) => job.status === 'seeding').length,
+  }
+}
+
+function destroyTray(): void {
+  tray?.destroy()
+  tray = null
+}
+
+function updateTray(): void {
+  if (!tray) return
+  const summary = transferSummary()
+  tray.setToolTip(
+    summary.active > 0 || summary.seeding > 0
+      ? `NexFetch — ${summary.active} downloading, ${summary.seeding} seeding`
+      : 'NexFetch',
+  )
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      { label: 'Open NexFetch', click: showMainWindow },
+      { type: 'separator' },
+      {
+        label: 'Pause all',
+        click: () => {
+          void (async () => {
+            if (!downloadManager) return
+            const jobs = activeTransfers().filter(
+              (job) =>
+                job.status === 'queued' ||
+                job.status === 'resolving' ||
+                job.status === 'downloading',
+            )
+            await Promise.allSettled(jobs.map((job) => downloadManager?.pauseJob(job.id)))
+          })()
+        },
+      },
+      {
+        label: 'Resume all',
+        click: () => {
+          void (async () => {
+            if (!downloadManager) return
+            const jobs = downloadManager.listJobs().filter((job) => job.status === 'paused')
+            await Promise.allSettled(jobs.map((job) => downloadManager?.resumeJob(job.id)))
+          })()
+        },
+      },
+      { type: 'separator' },
+      { label: 'Quit NexFetch', click: () => app.quit() },
+    ]),
+  )
+}
+
+function ensureTray(): boolean {
+  if (tray) return true
+  try {
+    tray = new Tray(nativeImage.createFromPath(iconPath()))
+    tray.on('double-click', showMainWindow)
+    updateTray()
+    return true
+  } catch (error) {
+    logger?.warn('tray_unavailable', {
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return false
+  }
+}
+
+async function promptWindowClose(): Promise<void> {
+  if (!mainWindow || mainWindow.isDestroyed() || quitPromptOpen) return
+  const summary = transferSummary()
+  if (summary.active === 0 && summary.seeding === 0) {
+    isQuitting = true
+    app.quit()
+    return
+  }
+
+  quitPromptOpen = true
+  try {
+    const result = await dialog.showMessageBox(mainWindow, {
+      type: 'warning',
+      title: 'Downloads are still running',
+      message:
+        summary.seeding > 0
+          ? `${summary.active} downloading, ${summary.seeding} seeding`
+          : `${summary.active} ${summary.active === 1 ? 'download is' : 'downloads are'} still running`,
+      detail:
+        'Continue in the background to keep transfers running, or close NexFetch and resume unfinished downloads next time. Seeding stops when NexFetch closes.',
+      buttons: ['Continue in Background', 'Close NexFetch', 'Cancel'],
+      defaultId: 0,
+      cancelId: 2,
+      noLink: true,
+    })
+
+    if (result.response === 0) {
+      if (ensureTray()) mainWindow.hide()
+      else mainWindow.minimize()
+      return
+    }
+    if (result.response === 1) {
+      isQuitting = true
+      app.quit()
+    }
+  } finally {
+    quitPromptOpen = false
+  }
+}
+
+async function promptQuit(): Promise<void> {
+  const summary = transferSummary()
+  if (summary.active === 0 && summary.seeding === 0) {
+    isQuitting = true
+    app.quit()
+    return
+  }
+  if (quitPromptOpen) return
+  quitPromptOpen = true
+  try {
+    const result = await dialog.showMessageBox({
+      type: 'warning',
+      title: 'Stop downloads and quit?',
+      message: `${summary.active} downloading, ${summary.seeding} seeding`,
+      detail: 'Unfinished downloads will resume next time. Seeding stops when NexFetch closes.',
+      buttons: ['Stop and Quit', 'Cancel'],
+      defaultId: 1,
+      cancelId: 1,
+      noLink: true,
+    })
+    if (result.response === 0) {
+      isQuitting = true
+      app.quit()
+    }
+  } finally {
+    quitPromptOpen = false
+  }
+}
+
+function attachWindowCloseHandler(window: BrowserWindow): void {
+  window.on('close', (event) => {
+    if (isQuitting) return
+    const summary = transferSummary()
+    logger?.info('window_close_requested', {
+      active: summary.active,
+      seeding: summary.seeding,
+    })
+    if (summary.active === 0 && summary.seeding === 0) return
+    event.preventDefault()
+    void promptWindowClose()
+  })
+  window.on('closed', () => {
+    if (mainWindow === window) mainWindow = null
+  })
 }
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock()
@@ -76,24 +271,37 @@ if (!gotSingleInstanceLock) {
 
   app.on('before-quit', (event) => {
     logger?.info('app_quitting')
+    if (!isQuitting) {
+      const summary = transferSummary()
+      if (summary.active > 0 || summary.seeding > 0) {
+        event.preventDefault()
+        void promptQuit()
+        return
+      }
+      isQuitting = true
+    }
     if (!downloadManager || shuttingDown) return
     shuttingDown = true
     event.preventDefault()
-    void downloadManager.shutdown().finally(() => {
-      app.quit()
-    })
+    void downloadManager
+      .shutdown()
+      .then(() => disposeEngines?.())
+      .finally(() => {
+        app.quit()
+      })
   })
 
   app.on('will-quit', () => {
     disposeIpc?.()
     disposeIpc = null
+    destroyTray()
     downloadManager = null
     database?.close()
     database = null
   })
 
   app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin') app.quit()
+    if (process.platform !== 'darwin' && !tray) app.quit()
   })
 
   app.on('activate', () => {
@@ -101,7 +309,10 @@ if (!gotSingleInstanceLock) {
       focusMainWindow()
       return
     }
-    if (logger) mainWindow = createMainWindow(isDev, logger)
+    if (logger) {
+      mainWindow = createMainWindow(isDev, logger)
+      attachWindowCloseHandler(mainWindow)
+    }
   })
 
   void app
@@ -166,6 +377,20 @@ if (!gotSingleInstanceLock) {
       registry.register(youtubeEngine)
       registry.register(new HttpEngine())
 
+      const torrentHelper = new TorrentHelperClient(
+        {
+          bundledRoot: app.isPackaged ? process.resourcesPath : join(process.cwd(), 'resources'),
+          isPackaged: app.isPackaged,
+          projectRoot: process.cwd(),
+        },
+        appLogger,
+      )
+      const torrentEngine = new TorrentEngine(torrentHelper, settings, appLogger)
+      registry.register(torrentEngine)
+      disposeEngines = async () => {
+        await Promise.allSettled(registry.list().map((engine) => engine.dispose?.()))
+      }
+
       const previewCache = new PreviewCache()
       const fileService = new FileService()
       const mediaVerifier = new MediaVerifier(dependencyService)
@@ -181,6 +406,12 @@ if (!gotSingleInstanceLock) {
         dependencyService,
         appLogger,
       )
+      const torrentPreview = new TorrentPreviewService(
+        torrentEngine,
+        previewCache,
+        join(userData, 'torrent-metadata'),
+        appLogger,
+      )
 
       downloadManager = new DownloadManager({
         registry,
@@ -192,10 +423,18 @@ if (!gotSingleInstanceLock) {
         previews: previewCache,
         logger: appLogger,
         onJobChanged: (job) => {
-          getMainWindow()?.webContents.send(IPC.jobsChanged, job)
+          const window = getMainWindow()
+          if (window && !window.isDestroyed()) {
+            window.webContents.send(IPC.jobsChanged, job)
+          }
+          updateTray()
         },
         onJobRemoved: (jobId) => {
-          getMainWindow()?.webContents.send(IPC.jobsRemoved, jobId)
+          const window = getMainWindow()
+          if (window && !window.isDestroyed()) {
+            window.webContents.send(IPC.jobsRemoved, jobId)
+          }
+          updateTray()
         },
       })
       downloadManager.recoverInterruptedJobs()
@@ -206,12 +445,14 @@ if (!gotSingleInstanceLock) {
         dependencies: dependencyService,
         previewService,
         youtubePreview,
+        torrentPreview,
         registry,
         downloadManager,
         logger: appLogger,
       })
 
       mainWindow = createMainWindow(isDev, appLogger)
+      attachWindowCloseHandler(mainWindow)
       downloadManager?.refreshQueue()
       appLogger.info('app_ready')
     })

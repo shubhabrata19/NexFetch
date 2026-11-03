@@ -4,6 +4,7 @@ import type { EngineSelection } from '@shared/domain/engine'
 import type { PersistedJobRecord } from '../download/job-repository'
 
 const JOB_STATUSES: readonly JobStatus[] = [
+  'setup',
   'queued',
   'resolving',
   'downloading',

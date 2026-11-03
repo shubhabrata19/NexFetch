@@ -1,4 +1,4 @@
-import type { DownloadJob, DownloadSource, EngineDetails, EngineId, JobId } from './job'
+import type { DownloadJob, DownloadSource, EngineDetails, EngineId, JobId, JobOutput } from './job'
 
 export type SourceInput = { kind: 'text'; value: string } | { kind: 'file'; path: string }
 
@@ -9,9 +9,12 @@ export type EngineMatch =
 export interface EngineCapabilities {
   preview: boolean
   selectableFormats: boolean
+  fileSelection: boolean
   audioOnly: boolean
   pauseResume: boolean
   resumeAfterRestart: boolean
+  /** The engine writes directly into the final destination instead of a workspace. */
+  directOutput: boolean
   checksumVerification: boolean
   seeding: boolean
   liveSpeed: boolean
@@ -47,7 +50,8 @@ export interface EngineRunContext extends EngineContext {
 }
 
 export type EngineEvent =
-  | { type: 'phase'; phase: 'resolving' | 'downloading' | 'processing' | 'verifying' }
+  | { type: 'phase'; phase: 'resolving' | 'downloading' | 'processing' | 'verifying' | 'seeding' }
+  | { type: 'output'; output: JobOutput }
   | {
       type: 'progress'
       downloadedBytes?: number | null
@@ -61,6 +65,7 @@ export type EngineEvent =
 export interface EngineResult {
   output: { kind: 'file' | 'directory'; path: string }
   totalBytes: number | null
+  files?: Array<{ path: string; bytes: number | null }>
 }
 
 export interface EnginePreviewData {
@@ -96,9 +101,21 @@ export interface DownloadEngine {
 
   resolveSelection(preview: EnginePreviewData, selection: unknown): EngineSelection
 
+  /** Applies setup-page edits before a deferred job is queued. */
+  updateSelection?(job: DownloadJob, selection: EngineSelection, update: unknown): EngineSelection
+
   start(job: DownloadJob, ctx: EngineRunContext): Promise<EngineResult>
 
   pause?(jobId: JobId): Promise<void>
   resume?(jobId: JobId): Promise<void>
+  stopSeeding?(jobId: JobId): Promise<void>
+  setLimits?(
+    job: DownloadJob,
+    downloadLimitBytesPerSecond: number | null,
+    uploadLimitBytesPerSecond: number | null,
+  ): Promise<void>
+  findMorePeers?(job: DownloadJob): Promise<void>
+  verify?(job: DownloadJob): Promise<void>
+  removeJob?(job: DownloadJob): Promise<void>
   dispose?(): Promise<void>
 }

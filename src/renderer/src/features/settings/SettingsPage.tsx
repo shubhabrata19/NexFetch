@@ -32,6 +32,17 @@ const RATE_OPTIONS = [
   { value: 50 * 1024 * 1024, label: '50 MB/s' },
 ] as const
 
+const UPLOAD_RATE_OPTIONS = [
+  { value: 0, label: 'Unlimited' },
+  { value: 128 * 1024, label: '128 KB/s' },
+  { value: 256 * 1024, label: '256 KB/s' },
+  { value: 512 * 1024, label: '512 KB/s' },
+  { value: 1 * 1024 * 1024, label: '1 MB/s' },
+  { value: 2 * 1024 * 1024, label: '2 MB/s' },
+  { value: 5 * 1024 * 1024, label: '5 MB/s' },
+  { value: 10 * 1024 * 1024, label: '10 MB/s' },
+] as const
+
 function rateInMegabytes(bytesPerSecond: number): string {
   if (bytesPerSecond <= 0) return ''
   const megabytes = bytesPerSecond / (1024 * 1024)
@@ -134,7 +145,10 @@ export function SettingsPage({
               <label className="setting-name" htmlFor="setting-concurrency">
                 Concurrent downloads
               </label>
-              <p>Higher values use more bandwidth, disk, and CPU during FFmpeg merges.</p>
+              <p>
+                Applies to YouTube, direct files, and torrents. Higher values use more bandwidth,
+                disk, and CPU during FFmpeg merges.
+              </p>
             </div>
             <select
               id="setting-concurrency"
@@ -255,6 +269,130 @@ export function SettingsPage({
           </div>
         </section>
 
+        <section className="card settings-card" aria-labelledby="settings-torrents-title">
+          <div className="card-heading">
+            <div>
+              <p className="eyebrow">Peer-to-peer</p>
+              <h2 id="settings-torrents-title">Torrents</h2>
+            </div>
+            <span className="badge badge--accent">BitTorrent</span>
+          </div>
+
+          <div className="setting-row">
+            <div className="setting-label">
+              <label className="setting-name" htmlFor="setting-torrent-profile">
+                Connection profile
+              </label>
+              <p>
+                Controls how many peers NexFetch connects to. Maximum uses more sockets and memory.
+              </p>
+            </div>
+            <select
+              id="setting-torrent-profile"
+              className="select"
+              value={settings.torrentConnectionProfile}
+              onChange={(event) =>
+                void applyPatch({
+                  torrentConnectionProfile: event.target
+                    .value as Settings['torrentConnectionProfile'],
+                })
+              }
+            >
+              <option value="balanced">Balanced · 50 per torrent / 200 total</option>
+              <option value="high">High · 100 per torrent / 500 total</option>
+              <option value="maximum">Maximum · 200 per torrent / 1,000 total</option>
+            </select>
+          </div>
+
+          <div className="setting-row">
+            <div className="setting-label">
+              <label className="setting-name" htmlFor="setting-upload-rate">
+                Maximum upload speed
+              </label>
+              <p>Applies to torrent uploads and seeding. Per-torrent limits can override it.</p>
+            </div>
+            <select
+              id="setting-upload-rate"
+              className="select"
+              value={settings.maxUploadRateBytesPerSecond}
+              onChange={(event) =>
+                void applyPatch({
+                  maxUploadRateBytesPerSecond: Number(event.target.value),
+                })
+              }
+            >
+              {UPLOAD_RATE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="setting-row">
+            <div className="setting-label">
+              <span className="setting-name">Router port mapping</span>
+              <p>
+                Uses NAT-PMP first, then UPnP, to open one temporary port for incoming peers. Turn
+                this off if you do not want NexFetch changing router state.
+              </p>
+            </div>
+            <label className="setting-toggle">
+              <input
+                type="checkbox"
+                checked={settings.torrentNATMapping}
+                onChange={(event) => void applyPatch({ torrentNATMapping: event.target.checked })}
+              />
+              <span>{settings.torrentNATMapping ? 'On' : 'Off'}</span>
+            </label>
+          </div>
+
+          <div className="setting-row">
+            <div className="setting-label">
+              <span className="setting-name">Keep seeding by default</span>
+              <p>
+                New torrents stop uploading when the download completes unless this is on or the
+                per-torrent option is selected.
+              </p>
+            </div>
+            <label className="setting-toggle">
+              <input
+                type="checkbox"
+                checked={settings.torrentSeedAfterComplete}
+                onChange={(event) =>
+                  void applyPatch({ torrentSeedAfterComplete: event.target.checked })
+                }
+              />
+              <span>{settings.torrentSeedAfterComplete ? 'On' : 'Off'}</span>
+            </label>
+          </div>
+
+          <div className="setting-row">
+            <div className="setting-label">
+              <span className="setting-name">Resume unfinished downloads</span>
+              <p>
+                Incomplete HTTP and torrent jobs resume when NexFetch starts. Seeding never resumes
+                automatically.
+              </p>
+            </div>
+            <label className="setting-toggle">
+              <input
+                type="checkbox"
+                checked={settings.resumeIncompleteDownloads}
+                onChange={(event) =>
+                  void applyPatch({ resumeIncompleteDownloads: event.target.checked })
+                }
+              />
+              <span>{settings.resumeIncompleteDownloads ? 'On' : 'Off'}</span>
+            </label>
+          </div>
+
+          <p className="card-footnote">
+            Web seeds are disabled. DHT, PEX, and local peer discovery are on for public torrents
+            and automatically off for private torrents. Encryption is always enabled.
+          </p>
+        </section>
+
         <section className="card settings-card" aria-labelledby="settings-appearance-title">
           <div className="card-heading">
             <div>
@@ -303,7 +441,7 @@ export function SettingsPage({
           </div>
           <p className="card-copy">
             yt-dlp extracts metadata and formats. FFmpeg merges adaptive video and audio; ffprobe
-            verifies the final 4K output.
+            verifies the final 4K output. The torrent engine is a bundled libtorrent helper.
           </p>
           <DependencyList status={dependencies} />
           <div className="settings-actions">
@@ -341,8 +479,8 @@ export function SettingsPage({
             <dd>Best available up to 4K · MKV allowed · verified after merge</dd>
           </dl>
           <p className="card-footnote">
-            The YouTube engine is the next milestone. HTTP and BitTorrent controls remain hidden
-            until those engines are implemented.
+            YouTube, HTTP, and BitTorrent are independent engines behind one queue. Torrent metadata
+            is parsed locally; magnets are intentionally not accepted.
           </p>
         </section>
       </div>

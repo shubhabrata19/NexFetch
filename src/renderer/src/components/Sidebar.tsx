@@ -6,7 +6,7 @@ import { SidebarActivity } from './SidebarActivity'
 import { StatusDot } from './StatusDot'
 import type { StatusTone } from './StatusDot'
 
-export type View = 'downloads' | 'history' | 'settings'
+export type View = 'downloads' | 'torrents' | 'history' | 'settings'
 
 interface SidebarProps {
   view: View
@@ -19,8 +19,13 @@ interface SidebarProps {
   onToggleTheme: () => void
 }
 
-const NAV_ITEMS: Array<{ view: View; label: string; icon: 'download' | 'history' | 'settings' }> = [
+const NAV_ITEMS: Array<{
+  view: View
+  label: string
+  icon: 'download' | 'torrent' | 'history' | 'settings'
+}> = [
   { view: 'downloads', label: 'Downloads', icon: 'download' },
+  { view: 'torrents', label: 'Torrents', icon: 'torrent' },
   { view: 'history', label: 'History', icon: 'history' },
   { view: 'settings', label: 'Settings', icon: 'settings' },
 ]
@@ -31,7 +36,12 @@ function systemSummary(dependencies: DependencyStatus | null): {
 } {
   if (!dependencies) return { label: 'Checking system…', tone: 'neutral' }
 
-  const all = [dependencies.ytDlp, dependencies.ffmpeg, dependencies.ffprobe]
+  const all = [
+    dependencies.ytDlp,
+    dependencies.ffmpeg,
+    dependencies.ffprobe,
+    dependencies.torrentHelper,
+  ]
   if (all.every((dependency) => dependency.state === 'ready')) {
     return { label: 'System ready', tone: 'success' }
   }
@@ -53,6 +63,12 @@ export function Sidebar({
 }: SidebarProps) {
   const system = systemSummary(dependencies)
   const nextTheme = resolvedTheme === 'dark' ? 'light' : 'dark'
+  const activeTorrents = jobs.filter(
+    (job) =>
+      job.engineId === 'torrent' &&
+      job.status !== 'setup' &&
+      !['completed', 'failed', 'cancelled'].includes(job.status),
+  ).length
 
   return (
     <aside className="sidebar" aria-label="Primary navigation">
@@ -84,6 +100,9 @@ export function Sidebar({
             >
               <Icon name={item.icon} size={19} />
               <span className="nav-label">{item.label}</span>
+              {item.view === 'torrents' && activeTorrents > 0 ? (
+                <span className="nav-badge">{activeTorrents}</span>
+              ) : null}
             </button>
           )
         })}

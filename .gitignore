@@ -3,10 +3,14 @@ out/
 release/
 dist/
 coverage/
+.venv-torrent-helper/
 *.log
 *.tmp
 resources/bin/*
 !resources/bin/.gitkeep
+tools/torrent-helper/build/
+tools/torrent-helper/dist/
+tools/torrent-helper/*.spec
 .DS_Store
 Thumbs.db
 .env

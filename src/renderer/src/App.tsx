@@ -8,6 +8,7 @@ import type {
   Settings,
   SettingsPatch,
   Theme,
+  TorrentSetupUpdateRequest,
 } from '@shared/ipc/contracts'
 import brandIcon from './assets/nexfetch-icon.png'
 import { ErrorPanel } from './components/ErrorPanel'
@@ -16,8 +17,10 @@ import { Toast } from './components/Toast'
 import type { ToastState } from './components/Toast'
 import type { View } from './components/Sidebar'
 import { DownloadsPage } from './features/downloads/DownloadsPage'
+import type { SourceTab } from './features/downloads/DownloadsPage'
 import { HistoryPage } from './features/history/HistoryPage'
 import { SettingsPage } from './features/settings/SettingsPage'
+import { TorrentsPage } from './features/torrent/TorrentsPage'
 
 function resolveTheme(theme: Theme): 'light' | 'dark' {
   if (theme !== 'system') return theme
@@ -43,6 +46,8 @@ function BootScreen() {
 
 export default function App() {
   const [view, setView] = useState<View>('downloads')
+  const [downloadSource, setDownloadSource] = useState<SourceTab>('youtube')
+  const [selectedTorrentId, setSelectedTorrentId] = useState<string | null>(null)
   const [info, setInfo] = useState<AppInfo | null>(null)
   const [settings, setSettings] = useState<Settings | null>(null)
   const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>(() => resolveTheme('system'))
@@ -206,9 +211,12 @@ export default function App() {
         return
       }
       setDependencies(result.data)
-      const allReady = [result.data.ytDlp, result.data.ffmpeg, result.data.ffprobe].every(
-        (dependency) => dependency.state === 'ready',
-      )
+      const allReady = [
+        result.data.ytDlp,
+        result.data.ffmpeg,
+        result.data.ffprobe,
+        result.data.torrentHelper,
+      ].every((dependency) => dependency.state === 'ready')
       showToast(
         allReady ? 'success' : 'info',
         allReady
@@ -230,6 +238,124 @@ export default function App() {
       upsertJob(result.data)
       showToast('success', 'Added to the download queue.')
       return result.data
+    },
+    [showToast, upsertJob],
+  )
+
+  const createTorrentSetup = useCallback(
+    async (request: CreateJobRequest): Promise<DownloadJob | null> => {
+      const result = await window.nexfetch.jobs.create(request)
+      if (!result.ok) {
+        showToast('error', result.error.message)
+        return null
+      }
+      upsertJob(result.data)
+      setSelectedTorrentId(result.data.id)
+      setView('torrents')
+      showToast('success', 'Torrent ready to set up.')
+      return result.data
+    },
+    [showToast, upsertJob],
+  )
+
+  const openTorrent = useCallback((jobId: string): void => {
+    setSelectedTorrentId(jobId)
+    setView('torrents')
+  }, [])
+
+  const startTorrentSetup = useCallback(
+    async (request: TorrentSetupUpdateRequest): Promise<DownloadJob | null> => {
+      const result = await window.nexfetch.jobs.startSetup(request)
+      if (!result.ok) {
+        showToast('error', result.error.message)
+        return null
+      }
+      upsertJob(result.data)
+      showToast('success', 'Torrent added to the download queue.')
+      return result.data
+    },
+    [showToast, upsertJob],
+  )
+
+  const startSeeding = useCallback(
+    (jobId: string): void => {
+      void (async () => {
+        const result = await window.nexfetch.jobs.startSeeding({ jobId })
+        if (!result.ok) {
+          showToast('error', result.error.message)
+          return
+        }
+        upsertJob(result.data)
+        showToast('info', 'Seeding started.')
+      })()
+    },
+    [showToast, upsertJob],
+  )
+
+  const stopSeeding = useCallback(
+    (jobId: string): void => {
+      void (async () => {
+        const result = await window.nexfetch.jobs.stopSeeding({ jobId })
+        if (!result.ok) {
+          showToast('error', result.error.message)
+          return
+        }
+        upsertJob(result.data)
+        showToast('info', 'Seeding stopped.')
+      })()
+    },
+    [showToast, upsertJob],
+  )
+
+  const setTorrentLimits = useCallback(
+    (
+      jobId: string,
+      downloadLimitBytesPerSecond: number | null,
+      uploadLimitBytesPerSecond: number | null,
+    ): void => {
+      void (async () => {
+        const result = await window.nexfetch.jobs.setTorrentLimits({
+          jobId,
+          downloadLimitBytesPerSecond,
+          uploadLimitBytesPerSecond,
+        })
+        if (!result.ok) {
+          showToast('error', result.error.message)
+          return
+        }
+        upsertJob(result.data)
+        showToast('success', 'Torrent speed limits updated.')
+      })()
+    },
+    [showToast, upsertJob],
+  )
+
+  const findMorePeers = useCallback(
+    (jobId: string): void => {
+      void (async () => {
+        const result = await window.nexfetch.jobs.findMorePeers({ jobId })
+        if (!result.ok) {
+          showToast('error', result.error.message)
+          return
+        }
+        upsertJob(result.data)
+        showToast('info', 'Asking trackers and DHT for more peers.')
+      })()
+    },
+    [showToast, upsertJob],
+  )
+
+  const verifyTorrent = useCallback(
+    (jobId: string): void => {
+      void (async () => {
+        const result = await window.nexfetch.jobs.verifyTorrent({ jobId })
+        if (!result.ok) {
+          showToast('error', result.error.message)
+          return
+        }
+        upsertJob(result.data)
+        showToast('info', 'Checking torrent pieces.')
+      })()
     },
     [showToast, upsertJob],
   )
@@ -349,10 +475,15 @@ export default function App() {
             dependencies={dependencies}
             engines={engines}
             jobs={jobs}
+            source={downloadSource}
+            onSourceChange={setDownloadSource}
             onCreateJob={createJob}
+            onCreateTorrent={createTorrentSetup}
+            onOpenTorrent={openTorrent}
             onCancelJob={cancelJob}
             onPauseJob={pauseJob}
             onResumeJob={resumeJob}
+            onStopSeeding={stopSeeding}
             onRetryJob={retryJob}
             onRemoveJob={removeJob}
             onOpenJobLocation={openJobLocation}
@@ -364,11 +495,38 @@ export default function App() {
           />
         ) : null}
 
+        {view === 'torrents' ? (
+          <TorrentsPage
+            settings={settings}
+            jobs={jobs}
+            selectedJobId={selectedTorrentId}
+            onSelectJob={setSelectedTorrentId}
+            onStartSetup={startTorrentSetup}
+            onCancelJob={cancelJob}
+            onPauseJob={pauseJob}
+            onResumeJob={resumeJob}
+            onRetryJob={retryJob}
+            onStartSeeding={startSeeding}
+            onStopSeeding={stopSeeding}
+            onRemoveJob={removeJob}
+            onOpenLocation={openJobLocation}
+            onFindMorePeers={findMorePeers}
+            onVerifyTorrent={verifyTorrent}
+            onSetTorrentLimits={setTorrentLimits}
+            onAddTorrent={() => {
+              setDownloadSource('torrent')
+              setView('downloads')
+            }}
+            onOpenSettings={() => setView('settings')}
+          />
+        ) : null}
+
         {view === 'history' ? (
           <HistoryPage
             jobs={jobs}
             onCancelJob={cancelJob}
             onRetryJob={retryJob}
+            onStopSeeding={stopSeeding}
             onRemoveJob={removeJob}
             onOpenJobLocation={openJobLocation}
           />

@@ -24,6 +24,11 @@ export function createDefaultSettings(defaultDownloadDirectory: string): Setting
     maxConcurrentDownloads: 2,
     concurrentFragments: 4,
     maxDownloadRateBytesPerSecond: 0,
+    maxUploadRateBytesPerSecond: 0,
+    torrentConnectionProfile: 'high',
+    torrentNATMapping: true,
+    torrentSeedAfterComplete: false,
+    resumeIncompleteDownloads: true,
     theme: 'system',
   }
 }

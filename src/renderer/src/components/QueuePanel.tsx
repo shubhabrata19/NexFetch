@@ -9,6 +9,7 @@ interface QueuePanelProps {
   onCancel: (jobId: string) => void
   onPause: (jobId: string) => void
   onResume: (jobId: string) => void
+  onStopSeeding: (jobId: string) => void
   onRetry: (jobId: string) => void
   onRemove: (jobId: string) => void
   onOpenLocation: (jobId: string, revealFile: boolean) => void
@@ -22,6 +23,7 @@ export function QueuePanel({
   onCancel,
   onPause,
   onResume,
+  onStopSeeding,
   onRetry,
   onRemove,
   onOpenLocation,
@@ -32,7 +34,7 @@ export function QueuePanel({
     engines.filter((engine) => engine.capabilities.pauseResume).map((engine) => engine.id),
   )
   const activeJobs = jobs
-    .filter((job) => !isTerminalStatus(job.status))
+    .filter((job) => job.status !== 'setup' && !isTerminalStatus(job.status))
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
   const recentJobs = jobs
     .filter((job) => isTerminalStatus(job.status))
@@ -66,6 +68,7 @@ export function QueuePanel({
                     onCancel={onCancel}
                     onPause={onPause}
                     onResume={onResume}
+                    onStopSeeding={onStopSeeding}
                     onRetry={onRetry}
                     onRemove={onRemove}
                     onOpenLocation={onOpenLocation}
@@ -96,6 +99,7 @@ export function QueuePanel({
                     onCancel={onCancel}
                     onPause={onPause}
                     onResume={onResume}
+                    onStopSeeding={onStopSeeding}
                     onRetry={onRetry}
                     onRemove={onRemove}
                     onOpenLocation={onOpenLocation}

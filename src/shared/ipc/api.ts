@@ -10,6 +10,10 @@ import type {
   Settings,
   SettingsPatch,
   SourcePreviewEnvelope,
+  TorrentPreviewEnvelope,
+  TorrentLimitsRequest,
+  TorrentPreviewProgressEvent,
+  TorrentSetupUpdateRequest,
   YoutubePreviewEnvelope,
 } from './contracts'
 
@@ -45,13 +49,30 @@ export interface NexFetchApi {
     preview(url: string, requestId: string): Promise<Result<YoutubePreviewEnvelope>>
     cancelPreview(requestId: string): Promise<Result<null>>
   }
+  torrent: {
+    chooseFile(): Promise<Result<TorrentPreviewEnvelope | null>>
+    previewBytes(
+      requestId: string,
+      name: string,
+      dataBase64: string,
+    ): Promise<Result<TorrentPreviewEnvelope>>
+    previewInfoHash(requestId: string, infoHash: string): Promise<Result<TorrentPreviewEnvelope>>
+    cancelPreview(requestId: string): Promise<Result<null>>
+    onPreviewProgress(listener: (event: TorrentPreviewProgressEvent) => void): Unsubscribe
+  }
   jobs: {
     create(request: CreateJobRequest): Promise<Result<DownloadJob>>
+    startSetup(request: TorrentSetupUpdateRequest): Promise<Result<DownloadJob>>
     list(): Promise<Result<DownloadJob[]>>
     cancel(request: JobIdRequest): Promise<Result<DownloadJob>>
     retry(request: JobIdRequest): Promise<Result<DownloadJob>>
     pause(request: JobIdRequest): Promise<Result<DownloadJob>>
     resume(request: JobIdRequest): Promise<Result<DownloadJob>>
+    startSeeding(request: JobIdRequest): Promise<Result<DownloadJob>>
+    stopSeeding(request: JobIdRequest): Promise<Result<DownloadJob>>
+    setTorrentLimits(request: TorrentLimitsRequest): Promise<Result<DownloadJob>>
+    findMorePeers(request: JobIdRequest): Promise<Result<DownloadJob>>
+    verifyTorrent(request: JobIdRequest): Promise<Result<DownloadJob>>
     remove(request: JobIdRequest): Promise<Result<null>>
     openLocation(request: OpenLocationRequest): Promise<Result<null>>
     onChanged(listener: (job: DownloadJob) => void): Unsubscribe

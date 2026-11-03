@@ -10,6 +10,7 @@ const DEPENDENCIES: Array<{ key: keyof DependencyStatus; label: string }> = [
   { key: 'ytDlp', label: 'yt-dlp' },
   { key: 'ffmpeg', label: 'FFmpeg' },
   { key: 'ffprobe', label: 'ffprobe' },
+  { key: 'torrentHelper', label: 'Torrent engine' },
 ]
 
 function toneFor(info: DependencyInfo | undefined): StatusTone {

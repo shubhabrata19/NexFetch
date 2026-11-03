@@ -14,6 +14,7 @@ interface JobListProps {
   onCancel: (jobId: string) => void
   onPause?: (jobId: string) => void
   onResume?: (jobId: string) => void
+  onStopSeeding?: (jobId: string) => void
   onRetry: (jobId: string) => void
   onRemove: (jobId: string) => void
   onOpenLocation: (jobId: string, revealFile: boolean) => void
@@ -26,6 +27,7 @@ function scheduledLabel(job: DownloadJob): string | null {
 }
 
 const STATUS_LABELS: Record<JobStatus, string> = {
+  setup: 'Setup',
   queued: 'Queued',
   resolving: 'Preparing',
   downloading: 'Downloading',
@@ -40,7 +42,7 @@ const STATUS_LABELS: Record<JobStatus, string> = {
 }
 
 function statusTone(status: JobStatus): string {
-  if (status === 'completed') return 'badge--success'
+  if (status === 'completed' || status === 'seeding') return 'badge--success'
   if (status === 'failed') return 'badge--danger'
   if (status === 'cancelled') return 'badge--neutral'
   if (status === 'cancelling') return 'badge--warning'
@@ -67,6 +69,14 @@ function jobDetailLine(job: DownloadJob): string | null {
     return parts.length > 0 ? parts.join(' · ') : null
   }
 
+  if (job.details?.engineId === 'torrent') {
+    return [
+      job.details.isPrivate ? 'Private' : 'Public',
+      `Seeds ${job.details.seedsConnected ?? '—'} (${job.details.seedsAvailable ?? '—'})`,
+      `Peers ${job.details.peersConnected ?? '—'} (${job.details.peersAvailable ?? '—'})`,
+    ].join(' · ')
+  }
+
   if (job.details?.engineId !== 'youtube') return null
   const parts = [
     job.details.selectedVideo?.label,
@@ -77,6 +87,9 @@ function jobDetailLine(job: DownloadJob): string | null {
 }
 
 function jobSize(job: DownloadJob): string | null {
+  if (job.details?.engineId === 'torrent' && job.progress.totalBytes !== null) {
+    return formatBytes(job.progress.totalBytes)
+  }
   if (job.output?.files[0]?.bytes != null) return formatBytes(job.output.files[0].bytes)
   if (job.progress.totalBytes !== null) return formatBytes(job.progress.totalBytes)
   return null
@@ -117,6 +130,7 @@ function JobActions({
   onCancel,
   onPause,
   onResume,
+  onStopSeeding,
   onRetry,
   onOpenLocation,
   onClear,
@@ -130,6 +144,7 @@ function JobActions({
   onCancel: (jobId: string) => void
   onPause?: (jobId: string) => void
   onResume?: (jobId: string) => void
+  onStopSeeding?: (jobId: string) => void
   onRetry: (jobId: string) => void
   onOpenLocation: (jobId: string, revealFile: boolean) => void
   onClear: () => void
@@ -167,7 +182,16 @@ function JobActions({
         <IconButton icon="pause" label={`Pause ${job.title}`} onClick={() => onPause?.(job.id)} />
       ) : null}
 
-      {!terminal ? (
+      {job.status === 'seeding' && onStopSeeding ? (
+        <IconButton
+          icon="stop"
+          label={`Stop seeding ${job.title}`}
+          onClick={() => onStopSeeding(job.id)}
+          tone="stop"
+        />
+      ) : null}
+
+      {!terminal && job.status !== 'seeding' ? (
         <IconButton
           icon="stop"
           label={job.status === 'cancelling' ? 'Stopping download' : `Stop ${job.title}`}
@@ -181,14 +205,14 @@ function JobActions({
         <IconButton icon="refresh" label={`Restart ${job.title}`} onClick={() => onRetry(job.id)} />
       ) : null}
 
-      {job.status === 'completed' && job.output ? (
+      {(job.status === 'completed' || job.status === 'seeding') && job.output ? (
         <>
           <IconButton
             icon="folder"
             label="Open download folder"
             onClick={() => onOpenLocation(job.id, false)}
           />
-          {!compact && job.output.files[0] ? (
+          {!compact && job.output.files.length === 1 ? (
             <IconButton
               icon="file"
               label="Show downloaded file"
@@ -275,6 +299,11 @@ function CompactJobDetails({ job }: { job: DownloadJob }) {
         {job.progress.bytesPerSecond !== null ? (
           <span className="job-speed">{formatSpeed(job.progress.bytesPerSecond)}</span>
         ) : null}
+        {job.details?.engineId === 'torrent' &&
+        job.details.uploadRateBytesPerSecond !== null &&
+        job.details.uploadRateBytesPerSecond > 0 ? (
+          <span className="job-speed">↑ {formatSpeed(job.details.uploadRateBytesPerSecond)}</span>
+        ) : null}
       </div>
 
       <div
@@ -293,6 +322,12 @@ function CompactJobDetails({ job }: { job: DownloadJob }) {
 
       <div className="job-progress-foot">
         <span className="job-size">{sizeLabel ?? 'Starting…'}</span>
+        {job.details?.engineId === 'torrent' ? (
+          <span className="job-torrent-stats">
+            S {job.details.seedsConnected ?? '—'} ({job.details.seedsAvailable ?? '—'}) · P{' '}
+            {job.details.peersConnected ?? '—'} ({job.details.peersAvailable ?? '—'})
+          </span>
+        ) : null}
         {job.progress.etaSeconds !== null ? (
           <span className="job-eta">ETA {formatEta(job.progress.etaSeconds)}</span>
         ) : null}
@@ -308,6 +343,7 @@ export function JobRow({
   onCancel,
   onPause,
   onResume,
+  onStopSeeding,
   onRetry,
   onRemove,
   onOpenLocation,
@@ -318,6 +354,7 @@ export function JobRow({
   onCancel: (jobId: string) => void
   onPause?: (jobId: string) => void
   onResume?: (jobId: string) => void
+  onStopSeeding?: (jobId: string) => void
   onRetry: (jobId: string) => void
   onRemove: (jobId: string) => void
   onOpenLocation: (jobId: string, revealFile: boolean) => void
@@ -458,6 +495,11 @@ export function JobRow({
                     {job.progress.bytesPerSecond !== null ? (
                       <span>{formatSpeed(job.progress.bytesPerSecond)}</span>
                     ) : null}
+                    {job.details?.engineId === 'torrent' &&
+                    job.details.uploadRateBytesPerSecond !== null &&
+                    job.details.uploadRateBytesPerSecond > 0 ? (
+                      <span>↑ {formatSpeed(job.details.uploadRateBytesPerSecond)}</span>
+                    ) : null}
                     {job.progress.etaSeconds !== null ? (
                       <span className="job-eta">ETA {formatEta(job.progress.etaSeconds)}</span>
                     ) : null}
@@ -506,6 +548,7 @@ export function JobRow({
         onCancel={onCancel}
         onPause={onPause}
         onResume={onResume}
+        onStopSeeding={onStopSeeding}
         onRetry={onRetry}
         onOpenLocation={onOpenLocation}
         onClear={beginClear}
@@ -525,6 +568,7 @@ export function JobList({
   onCancel,
   onPause,
   onResume,
+  onStopSeeding,
   onRetry,
   onRemove,
   onOpenLocation,
@@ -558,6 +602,7 @@ export function JobList({
           onCancel={onCancel}
           onPause={onPause}
           onResume={onResume}
+          onStopSeeding={onStopSeeding}
           onRetry={onRetry}
           onRemove={onRemove}
           onOpenLocation={onOpenLocation}

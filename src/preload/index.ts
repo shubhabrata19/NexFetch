@@ -46,13 +46,28 @@ const api: NexFetchApi = {
     preview: (url, requestId) => invoke(IPC.youtubePreview, { url, requestId }),
     cancelPreview: (requestId) => invoke(IPC.youtubeCancelPreview, { requestId }),
   },
+  torrent: {
+    chooseFile: () => invoke(IPC.torrentChooseFile),
+    previewBytes: (requestId, name, dataBase64) =>
+      invoke(IPC.torrentPreviewBytes, { requestId, name, dataBase64 }),
+    previewInfoHash: (requestId, infoHash) =>
+      invoke(IPC.torrentPreviewInfoHash, { requestId, infoHash }),
+    cancelPreview: (requestId) => invoke(IPC.torrentCancelPreview, { requestId }),
+    onPreviewProgress: (listener) => subscribe(IPC.torrentPreviewProgress, listener),
+  },
   jobs: {
     create: (request) => invoke(IPC.jobsCreate, request),
+    startSetup: (request) => invoke(IPC.jobsStartSetup, request),
     list: () => invoke(IPC.jobsList),
     cancel: (request) => invoke(IPC.jobsCancel, request),
     retry: (request) => invoke(IPC.jobsRetry, request),
     pause: (request) => invoke(IPC.jobsPause, request),
     resume: (request) => invoke(IPC.jobsResume, request),
+    startSeeding: (request) => invoke(IPC.jobsStartSeeding, request),
+    stopSeeding: (request) => invoke(IPC.jobsStopSeeding, request),
+    setTorrentLimits: (request) => invoke(IPC.torrentsSetLimits, request),
+    findMorePeers: (request) => invoke(IPC.torrentsFindMorePeers, request),
+    verifyTorrent: (request) => invoke(IPC.torrentsVerify, request),
     remove: (request) => invoke(IPC.jobsRemove, request),
     openLocation: (request) => invoke(IPC.jobsOpenLocation, request),
     onChanged: (listener) => subscribe(IPC.jobsChanged, listener),

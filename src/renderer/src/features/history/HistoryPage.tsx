@@ -6,32 +6,36 @@ interface HistoryPageProps {
   jobs: DownloadJob[]
   onCancelJob: (jobId: string) => void
   onRetryJob: (jobId: string) => void
+  onStopSeeding: (jobId: string) => void
   onRemoveJob: (jobId: string) => void
   onOpenJobLocation: (jobId: string, revealFile: boolean) => void
 }
 
-type HistoryFilter = 'all' | 'files' | 'videos'
+type HistoryFilter = 'all' | 'files' | 'videos' | 'torrents'
 
 const FILTERS: Array<{ id: HistoryFilter; label: string }> = [
   { id: 'all', label: 'All' },
   { id: 'files', label: 'Files' },
   { id: 'videos', label: 'Videos' },
+  { id: 'torrents', label: 'Torrents' },
 ]
 
 export function HistoryPage({
   jobs,
   onCancelJob,
   onRetryJob,
+  onStopSeeding,
   onRemoveJob,
   onOpenJobLocation,
 }: HistoryPageProps) {
   const [filter, setFilter] = useState<HistoryFilter>('all')
   const terminalJobs = jobs.filter((job) =>
-    ['completed', 'failed', 'cancelled'].includes(job.status),
+    ['completed', 'failed', 'cancelled', 'seeding'].includes(job.status),
   )
   const filteredJobs = terminalJobs.filter((job) => {
     if (filter === 'files') return job.engineId === 'http'
     if (filter === 'videos') return job.engineId === 'youtube'
+    if (filter === 'torrents') return job.engineId === 'torrent'
     return true
   })
 
@@ -42,7 +46,8 @@ export function HistoryPage({
           <p className="eyebrow">Archive</p>
           <h1>History</h1>
           <p className="page-subtitle">
-            Completed, failed, and cancelled jobs. Clearing history never deletes downloaded files.
+            Completed, failed, cancelled, and seeding jobs. Clearing history never deletes
+            downloaded files.
           </p>
         </div>
         <span className="badge badge--neutral">
@@ -56,7 +61,11 @@ export function HistoryPage({
             entry.id === 'all'
               ? terminalJobs.length
               : terminalJobs.filter((job) =>
-                  entry.id === 'files' ? job.engineId === 'http' : job.engineId === 'youtube',
+                  entry.id === 'files'
+                    ? job.engineId === 'http'
+                    : entry.id === 'videos'
+                      ? job.engineId === 'youtube'
+                      : job.engineId === 'torrent',
                 ).length
           return (
             <button
@@ -82,11 +91,14 @@ export function HistoryPage({
             ? 'Direct file downloads will appear here.'
             : filter === 'videos'
               ? 'YouTube downloads will appear here.'
-              : 'Finished downloads will keep their output location and diagnostics here.'
+              : filter === 'torrents'
+                ? 'Completed torrents will appear here.'
+                : 'Finished downloads will keep their output location and diagnostics here.'
         }
         emptyIcon="history"
         onCancel={onCancelJob}
         onRetry={onRetryJob}
+        onStopSeeding={onStopSeeding}
         onRemove={onRemoveJob}
         onOpenLocation={onOpenJobLocation}
       />

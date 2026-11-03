@@ -1,4 +1,5 @@
 import type { AppError } from './errors'
+import type { TorrentJobDetails } from './torrent'
 
 export type EngineId = string
 export type JobId = string
@@ -16,9 +17,18 @@ export type HttpDownloadSource = {
   host: string
 }
 
-export type DownloadSource = YoutubeDownloadSource | HttpDownloadSource
+export type TorrentDownloadSource = {
+  kind: 'torrent'
+  infoHash: string
+  hashVersion: 1 | 2
+  sourceKind: 'file' | 'infohash'
+  displayName: string
+}
+
+export type DownloadSource = YoutubeDownloadSource | HttpDownloadSource | TorrentDownloadSource
 
 export type JobStatus =
+  | 'setup'
   | 'queued'
   | 'resolving'
   | 'downloading'
@@ -76,7 +86,7 @@ export interface HttpJobDetails {
   checksum: HttpChecksumState | null
 }
 
-export type EngineDetails = YoutubeJobDetails | HttpJobDetails
+export type EngineDetails = YoutubeJobDetails | HttpJobDetails | TorrentJobDetails
 
 export interface JobOutput {
   directory: string

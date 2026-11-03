@@ -22,18 +22,21 @@ const BINARY_NAMES: Record<DependencyId, string> = {
   'yt-dlp': 'yt-dlp',
   ffmpeg: 'ffmpeg',
   ffprobe: 'ffprobe',
+  'torrent-helper': 'nexfetch-torrent-helper',
 }
 
 const ENV_KEYS: Record<DependencyId, string> = {
   'yt-dlp': 'NXF_YTDLP_PATH',
   ffmpeg: 'NXF_FFMPEG_PATH',
   ffprobe: 'NXF_FFPROBE_PATH',
+  'torrent-helper': 'NXF_TORRENT_HELPER_PATH',
 }
 
 const VERSION_ARGS: Record<DependencyId, string[]> = {
   'yt-dlp': ['--version'],
   ffmpeg: ['-version'],
   ffprobe: ['-version'],
+  'torrent-helper': [],
 }
 
 function executableName(id: DependencyId): string {
@@ -59,12 +62,13 @@ export class DependencyService {
   }
 
   async getStatus(): Promise<DependencyStatus> {
-    const [ytDlp, ffmpeg, ffprobe] = await Promise.all([
+    const [ytDlp, ffmpeg, ffprobe, torrentHelper] = await Promise.all([
       this.check('yt-dlp'),
       this.check('ffmpeg'),
       this.check('ffprobe'),
+      this.check('torrent-helper'),
     ])
-    return { ytDlp, ffmpeg, ffprobe }
+    return { ytDlp, ffmpeg, ffprobe, torrentHelper }
   }
 
   resolveExecutable(id: DependencyId): ResolvedExecutable | null {
@@ -100,6 +104,11 @@ export class DependencyService {
     const resolved = this.resolveExecutable(id)
     if (!resolved) {
       return { id, state: 'missing', version: null, source: null }
+    }
+
+    // The torrent helper is a long-running JSON-lines process, not a CLI tool.
+    if (id === 'torrent-helper') {
+      return { id, state: 'ready', version: null, source: resolved.source }
     }
 
     const version = await this.readVersion(resolved.path, VERSION_ARGS[id])

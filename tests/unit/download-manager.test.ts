@@ -31,7 +31,9 @@ const source: DownloadSource = {
 const capabilities: EngineCapabilities = {
   preview: true,
   selectableFormats: true,
+  fileSelection: false,
   audioOnly: false,
+  directOutput: false,
   pauseResume: false,
   resumeAfterRestart: false,
   checksumVerification: false,

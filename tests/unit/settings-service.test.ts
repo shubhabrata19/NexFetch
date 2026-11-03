@@ -40,6 +40,11 @@ describe('settings service', () => {
       maxConcurrentDownloads: 2,
       concurrentFragments: 4,
       maxDownloadRateBytesPerSecond: 0,
+      maxUploadRateBytesPerSecond: 0,
+      torrentConnectionProfile: 'high',
+      torrentNATMapping: true,
+      torrentSeedAfterComplete: false,
+      resumeIncompleteDownloads: true,
       theme: 'system',
     })
 
@@ -76,6 +81,11 @@ describe('settings service', () => {
       maxConcurrentDownloads: 3,
       concurrentFragments: 4,
       maxDownloadRateBytesPerSecond: 0,
+      maxUploadRateBytesPerSecond: 0,
+      torrentConnectionProfile: 'high',
+      torrentNATMapping: true,
+      torrentSeedAfterComplete: false,
+      resumeIncompleteDownloads: true,
       theme: 'dark',
     })
   })

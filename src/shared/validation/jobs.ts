@@ -32,6 +32,67 @@ export const httpSelectionSchema = z
   })
   .strict()
 
+const rateLimitSchema = z.number().int().min(0).max(1_000_000_000).nullable()
+
+export const torrentSelectionSchema = z
+  .object({
+    fileIndices: z.array(z.number().int().min(0).max(50_000)).max(50_000),
+    downloadLimitBytesPerSecond: rateLimitSchema.optional(),
+    uploadLimitBytesPerSecond: rateLimitSchema.optional(),
+    seedAfterComplete: z.boolean().optional(),
+  })
+  .strict()
+
+export const torrentLimitsRequestSchema = z
+  .object({
+    jobId: z.string().min(1).max(100),
+    downloadLimitBytesPerSecond: rateLimitSchema,
+    uploadLimitBytesPerSecond: rateLimitSchema,
+  })
+  .strict()
+
+export const torrentSetupUpdateSchema = z
+  .object({
+    jobId: z.string().min(1).max(100),
+    destination: z.string().min(1).max(4096),
+    fileIndices: z.array(z.number().int().min(0).max(50_000)).max(50_000),
+    downloadLimitBytesPerSecond: rateLimitSchema,
+    uploadLimitBytesPerSecond: rateLimitSchema,
+    seedAfterComplete: z.boolean(),
+  })
+  .strict()
+
+export const torrentInfoHashSchema = z.string().trim().min(32).max(80)
+
+export const torrentPreviewRequestSchema = z
+  .object({
+    requestId: z.string().min(1).max(100),
+    infoHash: torrentInfoHashSchema,
+  })
+  .strict()
+
+const MAX_TORRENT_BYTES = 10 * 1024 * 1024
+
+export const torrentBytesPreviewRequestSchema = z
+  .object({
+    requestId: z.string().min(1).max(100),
+    name: z.string().min(1).max(260),
+    dataBase64: z
+      .string()
+      .min(1)
+      .max(Math.ceil((MAX_TORRENT_BYTES * 4) / 3) + 16)
+      .refine((value) => /^[A-Za-z0-9+/]*={0,2}$/.test(value), {
+        message: 'The torrent file data is not valid base64.',
+      }),
+  })
+  .strict()
+
+export const torrentCancelPreviewSchema = z
+  .object({
+    requestId: z.string().min(1).max(100),
+  })
+  .strict()
+
 export const scheduledAtSchema = z
   .string()
   .min(1)
@@ -60,9 +121,10 @@ export const previewCancelSchema = youtubeCancelPreviewSchema
 export const createJobRequestSchema = z
   .object({
     previewToken: z.string().min(1).max(100),
-    selection: z.union([youtubeSelectionSchema, httpSelectionSchema]),
+    selection: z.union([youtubeSelectionSchema, httpSelectionSchema, torrentSelectionSchema]),
     destination: z.string().min(1).max(4096),
     scheduledAt: scheduledAtSchema.optional(),
+    deferStart: z.boolean().optional(),
   })
   .strict()
 
@@ -81,3 +143,4 @@ export const openLocationRequestSchema = z
 
 export type YoutubeSelectionInput = z.infer<typeof youtubeSelectionSchema>
 export type HttpSelectionInput = z.infer<typeof httpSelectionSchema>
+export type TorrentSelectionInput = z.infer<typeof torrentSelectionSchema>

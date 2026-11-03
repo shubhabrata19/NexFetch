@@ -1,6 +1,7 @@
 import { DomainError } from '@shared/domain/errors'
 import type { EngineContext, EnginePreviewData } from '@shared/domain/engine'
 import type { HttpPreview } from '@shared/domain/http'
+import type { TorrentPreview } from '@shared/domain/torrent'
 import type { YoutubePreview } from '@shared/domain/youtube'
 import type { SourcePreviewEnvelope } from '@shared/ipc/contracts'
 import type { DependencyService } from '../services/dependency-service'
@@ -25,6 +26,19 @@ export function toPreviewEnvelope(
     return {
       ...(data.data as HttpPreview),
       engineId: 'http',
+      previewToken: token.token,
+      expiresAt: token.expiresAt,
+    }
+  }
+
+  if (data.engineId === 'torrent') {
+    const { metadataPath: _metadataPath, ...preview } = data.data as TorrentPreview & {
+      metadataPath?: string
+    }
+    void _metadataPath
+    return {
+      ...preview,
+      engineId: 'torrent',
       previewToken: token.token,
       expiresAt: token.expiresAt,
     }

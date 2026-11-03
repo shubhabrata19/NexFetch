@@ -4,7 +4,7 @@ import type { AppError } from '@shared/domain/errors'
 import type { DownloadEngine, EngineEvent, EngineRunContext } from '@shared/domain/engine'
 import type { DownloadJob, JobStatus } from '@shared/domain/job'
 import { emptyProgress } from '@shared/domain/job'
-import type { CreateJobRequest } from '@shared/ipc/contracts'
+import type { CreateJobRequest, TorrentSetupUpdateRequest } from '@shared/ipc/contracts'
 import type { EngineRegistry } from '../engines/registry'
 import type { DependencyService } from '../services/dependency-service'
 import type { FileService } from '../services/file-service'
@@ -26,6 +26,10 @@ function isPausableStatus(status: JobStatus): boolean {
   return status === 'queued' || status === 'resolving' || status === 'downloading'
 }
 
+function isTerminal(status: JobStatus): boolean {
+  return status === 'completed' || status === 'failed' || status === 'cancelled'
+}
+
 function scheduledTime(job: PersistedJobRecord): number | null {
   if (!job.scheduledAt) return null
   const parsed = Date.parse(job.scheduledAt)
@@ -43,10 +47,6 @@ export interface DownloadManagerOptions {
   logger: Logger
   onJobChanged: (job: DownloadJob) => void
   onJobRemoved: (jobId: string) => void
-}
-
-function isTerminal(status: JobStatus): boolean {
-  return status === 'completed' || status === 'failed' || status === 'cancelled'
 }
 
 function nonNegative(value: number | null | undefined): number | null {
@@ -117,6 +117,29 @@ export class DownloadManager {
     }
 
     const engine = this.options.registry.get(preview.engineId)
+
+    if (preview.engineId === 'torrent') {
+      const infoHash = (preview.data as { infoHash?: unknown }).infoHash
+      if (typeof infoHash === 'string') {
+        const duplicate = this.options.jobs
+          .list()
+          .find(
+            (job) =>
+              job.engineId === 'torrent' &&
+              job.details?.engineId === 'torrent' &&
+              job.details.infoHash === infoHash &&
+              job.status !== 'failed' &&
+              job.status !== 'cancelled',
+          )
+        if (duplicate) {
+          throw new DomainError(
+            'TORRENT_DUPLICATE',
+            'This torrent is already in your Torrents list. Open it there instead.',
+          )
+        }
+      }
+    }
+
     const destination = await this.options.files.validateDestination(request.destination)
     const selection = engine.resolveSelection(preview, request.selection)
 
@@ -137,13 +160,14 @@ export class DownloadManager {
         ? new Date(scheduled).toISOString()
         : null
     const now = new Date().toISOString()
+    const deferred = request.deferStart === true && preview.engineId === 'torrent'
     const job: PersistedJobRecord = {
       id: randomUUID(),
       revision: 1,
       engineId: preview.engineId,
       source: preview.source,
       title: preview.title,
-      status: 'queued',
+      status: deferred ? 'setup' : 'queued',
       progress: emptyProgress(),
       destination,
       output: null,
@@ -165,7 +189,38 @@ export class DownloadManager {
       jobId: job.id,
       engineId: job.engineId,
       title: job.title.slice(0, 120),
+      deferred,
     })
+    if (!deferred) this.pump()
+    return toJobView(job)
+  }
+
+  async startSetup(request: TorrentSetupUpdateRequest): Promise<DownloadJob> {
+    const job = this.getOrThrow(request.jobId)
+    if (job.status !== 'setup') {
+      throw new DomainError('INVALID_REQUEST', 'This torrent is not waiting for setup.')
+    }
+    if (!job.selection) {
+      throw new DomainError('INTERNAL_ERROR', 'This torrent has no saved setup details.')
+    }
+
+    const engine = this.options.registry.get(job.engineId)
+    if (!engine.updateSelection) {
+      throw new DomainError('INVALID_REQUEST', 'This download cannot be configured.')
+    }
+
+    const destination = await this.options.files.validateDestination(request.destination)
+    const selection = engine.updateSelection(toJobView(job), job.selection, request)
+    job.selection = selection
+    job.destination = destination
+    job.details = selection.details
+    job.status = 'queued'
+    job.error = null
+    job.completedAt = null
+    this.touch(job)
+    this.options.jobs.save(job)
+    this.emit(job)
+    this.options.logger.info('torrent_setup_started', { jobId: job.id })
     this.pump()
     return toJobView(job)
   }
@@ -173,6 +228,11 @@ export class DownloadManager {
   async cancelJob(jobId: string): Promise<DownloadJob> {
     const job = this.getOrThrow(jobId)
     if (isTerminal(job.status)) return toJobView(job)
+
+    if (job.status === 'setup') {
+      this.setTerminal(job, 'cancelled', null)
+      return toJobView(job)
+    }
 
     if (job.status === 'queued') {
       this.setTerminal(job, 'cancelled', null)
@@ -268,6 +328,88 @@ export class DownloadManager {
     return toJobView(job)
   }
 
+  async startSeeding(jobId: string): Promise<DownloadJob> {
+    const job = this.getOrThrow(jobId)
+    if (job.engineId !== 'torrent' || job.status !== 'completed') {
+      throw new DomainError('INVALID_REQUEST', 'Only a completed torrent can start seeding.')
+    }
+    if (!job.selection || job.details?.engineId !== 'torrent') {
+      throw new DomainError('INVALID_REQUEST', 'This torrent has no saved seeding details.')
+    }
+    const engine = this.options.registry.get(job.engineId)
+    if (!engine.updateSelection) {
+      throw new DomainError('INVALID_REQUEST', 'This torrent cannot start seeding.')
+    }
+
+    const details = job.details
+    const selection = engine.updateSelection(toJobView(job), job.selection, {
+      jobId: job.id,
+      destination: job.destination,
+      fileIndices: details.files.filter((file) => file.selected).map((file) => file.index),
+      downloadLimitBytesPerSecond: details.downloadLimitBytesPerSecond,
+      uploadLimitBytesPerSecond: details.uploadLimitBytesPerSecond,
+      seedAfterComplete: true,
+    })
+    job.selection = selection
+    job.details = selection.details
+    job.status = 'queued'
+    job.completedAt = null
+    job.error = null
+    job.scheduledAt = null
+    this.touch(job)
+    this.options.jobs.save(job)
+    this.emit(job)
+    this.pump()
+    return toJobView(job)
+  }
+
+  async stopSeeding(jobId: string): Promise<DownloadJob> {
+    const job = this.getOrThrow(jobId)
+    if (job.status !== 'seeding') {
+      throw new DomainError('INVALID_REQUEST', 'This torrent is not currently seeding.')
+    }
+    const engine = this.options.registry.get(job.engineId)
+    if (!engine.stopSeeding) {
+      throw new DomainError('INVALID_REQUEST', 'This download cannot stop seeding.')
+    }
+    await engine.stopSeeding(jobId)
+    return this.getJob(jobId) ?? toJobView(job)
+  }
+
+  async setTorrentLimits(
+    jobId: string,
+    downloadLimitBytesPerSecond: number | null,
+    uploadLimitBytesPerSecond: number | null,
+  ): Promise<DownloadJob> {
+    const job = this.getOrThrow(jobId)
+    const engine = this.options.registry.get(job.engineId)
+    if (!engine.setLimits) {
+      throw new DomainError('INVALID_REQUEST', 'This download does not support speed limits.')
+    }
+    await engine.setLimits(job, downloadLimitBytesPerSecond, uploadLimitBytesPerSecond)
+    return this.getJob(jobId) ?? toJobView(job)
+  }
+
+  async findMorePeers(jobId: string): Promise<DownloadJob> {
+    const job = this.getOrThrow(jobId)
+    const engine = this.options.registry.get(job.engineId)
+    if (!engine.findMorePeers) {
+      throw new DomainError('INVALID_REQUEST', 'This download does not support peer discovery.')
+    }
+    await engine.findMorePeers(job)
+    return this.getJob(jobId) ?? toJobView(job)
+  }
+
+  async verifyTorrent(jobId: string): Promise<DownloadJob> {
+    const job = this.getOrThrow(jobId)
+    const engine = this.options.registry.get(job.engineId)
+    if (!engine.verify) {
+      throw new DomainError('INVALID_REQUEST', 'This download does not support verification.')
+    }
+    await engine.verify(job)
+    return this.getJob(jobId) ?? toJobView(job)
+  }
+
   async retryJob(jobId: string): Promise<DownloadJob> {
     const job = this.getOrThrow(jobId)
     if (!isTerminal(job.status) || job.status === 'completed') {
@@ -295,11 +437,21 @@ export class DownloadManager {
 
   async removeJob(jobId: string): Promise<void> {
     const job = this.getOrThrow(jobId)
-    if (!isTerminal(job.status)) {
+    if (job.status !== 'setup' && !isTerminal(job.status)) {
       throw new DomainError('INVALID_REQUEST', 'Cancel an active download before removing it.')
     }
 
     const workspace = job.workspaceDirectory
+    try {
+      if (job.status !== 'setup') {
+        await this.options.registry.get(job.engineId).removeJob?.(toJobView(job))
+      }
+    } catch (error) {
+      this.options.logger.warn('job_engine_cleanup_failed', {
+        jobId,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
     this.options.jobs.remove(jobId)
     this.options.onJobRemoved(jobId)
     if (workspace) {
@@ -318,7 +470,18 @@ export class DownloadManager {
     const now = new Date().toISOString()
     for (const job of this.options.jobs.list()) {
       if (isTerminal(job.status)) continue
-      if (job.status === 'queued' || job.status === 'paused') continue
+      if (job.status === 'setup' || job.status === 'queued' || job.status === 'paused') continue
+
+      if (job.status === 'seeding') {
+        // Seeding never resumes automatically after a close.
+        job.status = 'completed'
+        job.completedAt = now
+        job.progress = { ...job.progress, bytesPerSecond: null, etaSeconds: null }
+        this.touch(job)
+        this.options.jobs.save(job)
+        this.emit(job)
+        continue
+      }
 
       if (job.status === 'cancelling') {
         job.status = 'cancelled'
@@ -334,7 +497,11 @@ export class DownloadManager {
         continue
       }
 
-      if (this.canResumeAfterRestart(job) && job.workspaceDirectory !== null) {
+      if (
+        this.options.settings.get().resumeIncompleteDownloads &&
+        this.canResumeAfterRestart(job) &&
+        (job.workspaceDirectory !== null || this.hasDirectOutput(job))
+      ) {
         job.status = 'queued'
         job.startedAt = null
         job.completedAt = null
@@ -389,6 +556,23 @@ export class DownloadManager {
     }
   }
 
+  private hasDirectOutput(job: PersistedJobRecord): boolean {
+    try {
+      return this.options.registry.get(job.engineId).capabilities.directOutput
+    } catch {
+      return false
+    }
+  }
+
+  private activeDownloadRuntimeCount(): number {
+    let count = 0
+    for (const jobId of this.runtimes.keys()) {
+      const job = this.options.jobs.get(jobId)
+      if (job && job.status !== 'seeding') count += 1
+    }
+    return count
+  }
+
   private getOrThrow(jobId: string): PersistedJobRecord {
     const job = this.options.jobs.get(jobId)
     if (!job) {
@@ -412,13 +596,13 @@ export class DownloadManager {
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
 
     for (const job of queued) {
-      if (this.runtimes.size >= maxConcurrent) return
+      if (this.activeDownloadRuntimeCount() >= maxConcurrent) return
       const dueAt = scheduledTime(job)
       if (dueAt !== null && dueAt > now) continue
       this.startJob(job)
     }
 
-    if (this.runtimes.size >= maxConcurrent) return
+    if (this.activeDownloadRuntimeCount() >= maxConcurrent) return
 
     const nextScheduled = queued
       .map((job) => ({ job, dueAt: scheduledTime(job) }))
@@ -473,11 +657,14 @@ export class DownloadManager {
         throw new DomainError('INVALID_REQUEST', 'This job has no saved format selection.')
       }
 
-      const workspace = await this.options.files.createWorkspace(job.destination, job.id)
-      job.workspaceDirectory = workspace
+      const engine: DownloadEngine = this.options.registry.get(job.engineId)
+      const directOutput = engine.capabilities.directOutput
+      const workspace = directOutput
+        ? job.destination
+        : await this.options.files.createWorkspace(job.destination, job.id)
+      job.workspaceDirectory = directOutput ? null : workspace
       this.options.jobs.save(job)
 
-      const engine: DownloadEngine = this.options.registry.get(job.engineId)
       const settings = this.options.settings.get()
       const context: EngineRunContext = {
         job: toJobView(job),
@@ -509,12 +696,17 @@ export class DownloadManager {
         )
       }
 
-      const output = await this.options.files.finalizeOutput(
-        result.output,
-        workspace,
-        job.destination,
-        job.selection.filenameBase,
-      )
+      const output = directOutput
+        ? {
+            directory: result.output.path,
+            files: result.files ?? [],
+          }
+        : await this.options.files.finalizeOutput(
+            result.output,
+            workspace,
+            job.destination,
+            job.selection.filenameBase,
+          )
 
       job.output = output
       job.status = 'completed'
@@ -529,7 +721,7 @@ export class DownloadManager {
       job.completedAt = new Date().toISOString()
       job.error = null
       this.touch(job)
-      await this.cleanupWorkspace(job, workspace)
+      await this.cleanupWorkspace(job, job.workspaceDirectory)
       this.options.jobs.save(job)
       this.emit(job)
       this.options.logger.info('job_completed', { jobId: job.id })
@@ -540,7 +732,23 @@ export class DownloadManager {
 
       if (aborted) {
         if (this.shuttingDown) {
-          if (this.canResumeAfterRestart(job) && job.workspaceDirectory !== null) {
+          if ((job.status as JobStatus) === 'seeding' && job.output) {
+            // A graceful quit stops seeding. The download itself is complete.
+            job.status = 'completed'
+            job.completedAt = job.completedAt ?? new Date().toISOString()
+            job.error = null
+            job.progress = { ...job.progress, bytesPerSecond: null, etaSeconds: null }
+            this.touch(job)
+            this.options.jobs.save(job)
+            this.emit(job)
+            return
+          }
+
+          if (
+            this.options.settings.get().resumeIncompleteDownloads &&
+            this.canResumeAfterRestart(job) &&
+            (job.workspaceDirectory !== null || this.hasDirectOutput(job))
+          ) {
             job.status = 'queued'
             job.startedAt = null
             job.completedAt = null
@@ -602,6 +810,15 @@ export class DownloadManager {
 
     if (event.type === 'phase') {
       job.status = event.phase
+      this.touch(job)
+      this.options.jobs.save(job)
+      this.emit(job)
+      if (event.phase === 'seeding') this.pump()
+      return
+    }
+
+    if (event.type === 'output') {
+      job.output = event.output
       this.touch(job)
       this.options.jobs.save(job)
       this.emit(job)
