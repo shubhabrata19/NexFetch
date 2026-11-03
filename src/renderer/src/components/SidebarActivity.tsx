@@ -5,8 +5,11 @@ import { isActiveStatus } from '../lib/jobs'
 
 interface SidebarActivityProps {
   jobs: DownloadJob[]
+  pausableEngineIds: ReadonlySet<string>
   onNavigate: () => void
   onStopJob: (jobId: string) => void
+  onPauseJob: (jobId: string) => void
+  onResumeJob: (jobId: string) => void
 }
 
 const STATUS_PRIORITY: Record<string, number> = {
@@ -29,7 +32,14 @@ function activeJobs(jobs: DownloadJob[]): DownloadJob[] {
     })
 }
 
-export function SidebarActivity({ jobs, onNavigate, onStopJob }: SidebarActivityProps) {
+export function SidebarActivity({
+  jobs,
+  pausableEngineIds,
+  onNavigate,
+  onStopJob,
+  onPauseJob,
+  onResumeJob,
+}: SidebarActivityProps) {
   const active = activeJobs(jobs)
   const visible = active.slice(0, 2)
   const first = active[0]
@@ -60,6 +70,8 @@ export function SidebarActivity({ jobs, onNavigate, onStopJob }: SidebarActivity
       <div className="sidebar-activity-list">
         {visible.map((job) => {
           const percent = job.progress.percent
+          const isTorrent = job.engineId === 'torrent'
+          const canPauseResume = pausableEngineIds.has(job.engineId)
           return (
             <div className="sidebar-job" key={job.id}>
               <div className="sidebar-job-thumb">
@@ -98,16 +110,42 @@ export function SidebarActivity({ jobs, onNavigate, onStopJob }: SidebarActivity
                   />
                 </div>
               </div>
-              <button
-                type="button"
-                className="sidebar-job-stop"
-                onClick={() => onStopJob(job.id)}
-                disabled={job.status === 'cancelling'}
-                title={job.status === 'cancelling' ? 'Stopping download' : `Stop ${job.title}`}
-                aria-label={job.status === 'cancelling' ? 'Stopping download' : `Stop ${job.title}`}
-              >
-                <Icon name="stop" size={11} />
-              </button>
+              {isTorrent && canPauseResume ? (
+                job.status === 'paused' ? (
+                  <button
+                    type="button"
+                    className="sidebar-job-stop"
+                    onClick={() => onResumeJob(job.id)}
+                    title={`Resume ${job.title}`}
+                    aria-label={`Resume ${job.title}`}
+                  >
+                    <Icon name="play" size={11} />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="sidebar-job-stop"
+                    onClick={() => onPauseJob(job.id)}
+                    title={`Pause ${job.title}`}
+                    aria-label={`Pause ${job.title}`}
+                  >
+                    <Icon name="pause" size={11} />
+                  </button>
+                )
+              ) : (
+                <button
+                  type="button"
+                  className="sidebar-job-stop"
+                  onClick={() => onStopJob(job.id)}
+                  disabled={job.status === 'cancelling'}
+                  title={job.status === 'cancelling' ? 'Stopping download' : `Stop ${job.title}`}
+                  aria-label={
+                    job.status === 'cancelling' ? 'Stopping download' : `Stop ${job.title}`
+                  }
+                >
+                  <Icon name="stop" size={11} />
+                </button>
+              )}
             </div>
           )
         })}

@@ -15,6 +15,7 @@ export const IPC = {
   youtubePreview: 'youtube:preview',
   youtubeCancelPreview: 'youtube:cancel-preview',
   torrentChooseFile: 'torrent:choose-file',
+  torrentPreviewFile: 'torrent:preview-file',
   torrentPreviewBytes: 'torrent:preview-bytes',
   torrentPreviewInfoHash: 'torrent:preview-info-hash',
   torrentCancelPreview: 'torrent:cancel-preview',

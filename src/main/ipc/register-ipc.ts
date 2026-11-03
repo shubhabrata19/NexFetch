@@ -26,6 +26,7 @@ import {
   torrentCancelPreviewSchema,
   torrentInfoHashSchema,
   torrentLimitsRequestSchema,
+  torrentPreviewFileRequestSchema,
   torrentPreviewRequestSchema,
   torrentSetupUpdateSchema,
   youtubeCancelPreviewSchema,
@@ -68,6 +69,7 @@ const INVOKE_CHANNELS = [
   IPC.youtubePreview,
   IPC.youtubeCancelPreview,
   IPC.torrentChooseFile,
+  IPC.torrentPreviewFile,
   IPC.torrentPreviewBytes,
   IPC.torrentPreviewInfoHash,
   IPC.torrentCancelPreview,
@@ -324,30 +326,27 @@ export function registerIpc(dependencies: IpcDependencies): () => void {
     return null
   })
 
-  handle<void, Awaited<ReturnType<TorrentPreviewService['previewFile']>> | null>(
-    IPC.torrentChooseFile,
-    null,
-    async () => {
-      const window = getWindow()
-      if (!window) throw new DomainError('INTERNAL_ERROR', 'The application window is unavailable.')
-      const result = await dialog.showOpenDialog(window, {
-        title: 'Open a .torrent file',
-        properties: ['openFile'],
-        filters: [{ name: 'Torrent files', extensions: ['torrent'] }],
-      })
-      if (result.canceled || result.filePaths.length === 0) return null
-      const path = result.filePaths[0]
-      if (!path) return null
-      const requestId = randomUUID()
-      const controller = new AbortController()
-      torrentPreviewControllers.set(requestId, controller)
-      try {
-        return await torrentPreview.previewFile(path, controller.signal)
-      } finally {
-        torrentPreviewControllers.delete(requestId)
-      }
-    },
-  )
+  handle<void, string | null>(IPC.torrentChooseFile, null, async () => {
+    const window = getWindow()
+    if (!window) throw new DomainError('INTERNAL_ERROR', 'The application window is unavailable.')
+    const result = await dialog.showOpenDialog(window, {
+      title: 'Open a .torrent file',
+      properties: ['openFile'],
+      filters: [{ name: 'Torrent files', extensions: ['torrent'] }],
+    })
+    if (result.canceled || result.filePaths.length === 0) return null
+    return result.filePaths[0] ?? null
+  })
+
+  handle(IPC.torrentPreviewFile, torrentPreviewFileRequestSchema, async (request) => {
+    const controller = new AbortController()
+    torrentPreviewControllers.set(request.requestId, controller)
+    try {
+      return await torrentPreview.previewFile(request.path, controller.signal)
+    } finally {
+      torrentPreviewControllers.delete(request.requestId)
+    }
+  })
 
   handle(IPC.torrentPreviewBytes, torrentBytesPreviewRequestSchema, async (request) => {
     const controller = new AbortController()

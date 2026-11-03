@@ -51,8 +51,18 @@ export function TorrentDownloadPanel({
   const [progress, setProgress] = useState<TorrentPreviewProgressEvent | null>(null)
   const [dragging, setDragging] = useState(false)
   const requestIdRef = useRef<string | null>(null)
+  const preparingStartedAt = useRef(0)
   const parsedHash = parseTorrentInfoHash(infoHash)
   const helperMissing = torrentHelperMissing(dependencies)
+
+  const waitForSpinner = async (): Promise<void> => {
+    const elapsed = Date.now() - preparingStartedAt.current
+    if (elapsed < 600) {
+      await new Promise<void>((resolve) => {
+        window.setTimeout(resolve, 600 - elapsed)
+      })
+    }
+  }
 
   useEffect(() => {
     const unsubscribe = window.nexfetch.torrent.onPreviewProgress((event) => {
@@ -74,43 +84,54 @@ export function TorrentDownloadPanel({
     const existing = existingJob(preview)
     if (existing) {
       setNotice('This torrent is already in your Torrents list. Opening it now.')
+      await waitForSpinner()
       onOpenTorrent(existing.id)
       return
     }
 
-    setBusy(true)
-    try {
-      const destination = defaultTorrentDestination(
-        settings.downloadDirectory,
-        torrentFolderName(preview.title, preview.files),
-      )
-      const job = await onCreateTorrent({
-        previewToken: preview.previewToken,
-        selection: {
-          fileIndices: preview.files.map((file) => file.index),
-          seedAfterComplete: settings.torrentSeedAfterComplete,
-        },
-        destination,
-        deferStart: true,
-      })
-      if (job) onOpenTorrent(job.id)
-    } finally {
-      setBusy(false)
+    const destination = defaultTorrentDestination(
+      settings.downloadDirectory,
+      torrentFolderName(preview.title, preview.files),
+    )
+    const job = await onCreateTorrent({
+      previewToken: preview.previewToken,
+      selection: {
+        fileIndices: preview.files.map((file) => file.index),
+        seedAfterComplete: settings.torrentSeedAfterComplete,
+      },
+      destination,
+      deferStart: true,
+    })
+    if (job) {
+      await waitForSpinner()
+      onOpenTorrent(job.id)
     }
   }
 
   const selectFile = async (): Promise<void> => {
     setError(null)
     setNotice(null)
+    const result = await window.nexfetch.torrent.chooseFile()
+    if (!result.ok) {
+      setError(result.error.message)
+      return
+    }
+    if (!result.data) return
+
+    const requestId = crypto.randomUUID()
+    requestIdRef.current = requestId
+    preparingStartedAt.current = Date.now()
     setBusy(true)
     try {
-      const result = await window.nexfetch.torrent.chooseFile()
-      if (!result.ok) {
-        setError(result.error.message)
+      const preview = await window.nexfetch.torrent.previewFile(result.data, requestId)
+      if (!preview.ok) {
+        setError(preview.error.message)
         return
       }
-      if (result.data) await createDraft(result.data)
+      await createDraft(preview.data)
     } finally {
+      await waitForSpinner()
+      requestIdRef.current = null
       setBusy(false)
     }
   }
@@ -126,6 +147,7 @@ export function TorrentDownloadPanel({
       setError('The torrent file is empty or larger than 10 MB.')
       return
     }
+    preparingStartedAt.current = Date.now()
     setBusy(true)
     try {
       const requestId = crypto.randomUUID()
@@ -140,6 +162,7 @@ export function TorrentDownloadPanel({
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'The torrent file could not be read.')
     } finally {
+      await waitForSpinner()
       requestIdRef.current = null
       setBusy(false)
     }
@@ -243,6 +266,26 @@ export function TorrentDownloadPanel({
               {progress?.message ??
                 'Info hashes resolve through DHT. Private torrents require the .torrent file.'}
             </p>
+            <div className="progress-track progress-track--indeterminate">
+              <span className="progress-fill" />
+            </div>
+          </div>
+        ) : busy ? (
+          <div
+            className="torrent-resolve-panel torrent-prepare-panel"
+            role="status"
+            aria-live="polite"
+          >
+            <div className="torrent-prepare-content">
+              <div className="spinner" aria-hidden="true" />
+              <div>
+                <p className="eyebrow">Torrent file</p>
+                <h3>Preparing torrent…</h3>
+                <p className="torrent-resolve-copy">
+                  Reading the file list, trackers, and metadata before opening setup.
+                </p>
+              </div>
+            </div>
             <div className="progress-track progress-track--indeterminate">
               <span className="progress-fill" />
             </div>

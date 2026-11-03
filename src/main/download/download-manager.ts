@@ -23,7 +23,12 @@ interface JobRuntime {
 }
 
 function isPausableStatus(status: JobStatus): boolean {
-  return status === 'queued' || status === 'resolving' || status === 'downloading'
+  return (
+    status === 'queued' ||
+    status === 'resolving' ||
+    status === 'downloading' ||
+    status === 'seeding'
+  )
 }
 
 function isTerminal(status: JobStatus): boolean {

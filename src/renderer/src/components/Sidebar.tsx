@@ -1,5 +1,5 @@
 import type { DownloadJob } from '@shared/domain/job'
-import type { DependencyStatus } from '@shared/ipc/contracts'
+import type { DependencyStatus, EngineInfo } from '@shared/ipc/contracts'
 import brandIcon from '../assets/nexfetch-icon.png'
 import { Icon } from './Icon'
 import { SidebarActivity } from './SidebarActivity'
@@ -13,9 +13,12 @@ interface SidebarProps {
   version: string
   dependencies: DependencyStatus | null
   jobs: DownloadJob[]
+  engines: EngineInfo[]
   resolvedTheme: 'light' | 'dark'
   onNavigate: (view: View) => void
   onStopJob: (jobId: string) => void
+  onPauseJob: (jobId: string) => void
+  onResumeJob: (jobId: string) => void
   onToggleTheme: () => void
 }
 
@@ -56,13 +59,19 @@ export function Sidebar({
   version,
   dependencies,
   jobs,
+  engines,
   resolvedTheme,
   onNavigate,
   onStopJob,
+  onPauseJob,
+  onResumeJob,
   onToggleTheme,
 }: SidebarProps) {
   const system = systemSummary(dependencies)
   const nextTheme = resolvedTheme === 'dark' ? 'light' : 'dark'
+  const pausableEngineIds = new Set(
+    engines.filter((engine) => engine.capabilities.pauseResume).map((engine) => engine.id),
+  )
   const activeTorrents = jobs.filter(
     (job) =>
       job.engineId === 'torrent' &&
@@ -111,8 +120,11 @@ export function Sidebar({
       <div className="sidebar-activity-wrap">
         <SidebarActivity
           jobs={jobs}
+          pausableEngineIds={pausableEngineIds}
           onNavigate={() => onNavigate('downloads')}
           onStopJob={onStopJob}
+          onPauseJob={onPauseJob}
+          onResumeJob={onResumeJob}
         />
       </div>
 

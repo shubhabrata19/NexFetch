@@ -152,6 +152,7 @@ function JobActions({
   onCancelClear: () => void
 }) {
   const terminal = isTerminalStatus(job.status)
+  const isTorrent = job.engineId === 'torrent'
   const canPause =
     canPauseResume &&
     (job.status === 'queued' || job.status === 'resolving' || job.status === 'downloading') &&
@@ -191,7 +192,7 @@ function JobActions({
         />
       ) : null}
 
-      {!terminal && job.status !== 'seeding' ? (
+      {!terminal && job.status !== 'seeding' && !isTorrent ? (
         <IconButton
           icon="stop"
           label={job.status === 'cancelling' ? 'Stopping download' : `Stop ${job.title}`}

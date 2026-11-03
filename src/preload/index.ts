@@ -48,6 +48,7 @@ const api: NexFetchApi = {
   },
   torrent: {
     chooseFile: () => invoke(IPC.torrentChooseFile),
+    previewFile: (path, requestId) => invoke(IPC.torrentPreviewFile, { path, requestId }),
     previewBytes: (requestId, name, dataBase64) =>
       invoke(IPC.torrentPreviewBytes, { requestId, name, dataBase64 }),
     previewInfoHash: (requestId, infoHash) =>

@@ -432,6 +432,38 @@ export default function App() {
     [showToast],
   )
 
+  const closeTorrent = useCallback(
+    (jobId: string): void => {
+      void (async () => {
+        const job = jobs.find((candidate) => candidate.id === jobId)
+        if (!job) return
+
+        const terminal =
+          job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled'
+        try {
+          if (!terminal && job.status !== 'setup') {
+            const cancelled = await window.nexfetch.jobs.cancel({ jobId })
+            if (!cancelled.ok) {
+              showToast('error', cancelled.error.message)
+              return
+            }
+            upsertJob(cancelled.data)
+          }
+          const removed = await window.nexfetch.jobs.remove({ jobId })
+          if (!removed.ok) {
+            showToast('error', removed.error.message)
+            return
+          }
+          setJobs((previous) => previous.filter((candidate) => candidate.id !== jobId))
+          setSelectedTorrentId((current) => (current === jobId ? null : current))
+        } catch {
+          showToast('error', 'The torrent could not be closed.')
+        }
+      })()
+    },
+    [jobs, showToast, upsertJob],
+  )
+
   const openJobLocation = useCallback(
     (jobId: string, revealFile: boolean): void => {
       void (async () => {
@@ -462,9 +494,12 @@ export default function App() {
         version={info.version}
         dependencies={dependencies}
         jobs={jobs}
+        engines={engines}
         resolvedTheme={resolvedTheme}
         onNavigate={setView}
         onStopJob={cancelJob}
+        onPauseJob={pauseJob}
+        onResumeJob={resumeJob}
         onToggleTheme={toggleTheme}
       />
 
@@ -509,6 +544,7 @@ export default function App() {
             onStartSeeding={startSeeding}
             onStopSeeding={stopSeeding}
             onRemoveJob={removeJob}
+            onCloseTorrent={closeTorrent}
             onOpenLocation={openJobLocation}
             onFindMorePeers={findMorePeers}
             onVerifyTorrent={verifyTorrent}

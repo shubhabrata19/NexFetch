@@ -73,6 +73,19 @@ export const torrentPreviewRequestSchema = z
 
 const MAX_TORRENT_BYTES = 10 * 1024 * 1024
 
+export const torrentPreviewFileRequestSchema = z
+  .object({
+    requestId: z.string().min(1).max(100),
+    path: z
+      .string()
+      .min(1)
+      .max(4096)
+      .refine((value) => /\.torrent$/i.test(value), {
+        message: 'Choose a .torrent file.',
+      }),
+  })
+  .strict()
+
 export const torrentBytesPreviewRequestSchema = z
   .object({
     requestId: z.string().min(1).max(100),

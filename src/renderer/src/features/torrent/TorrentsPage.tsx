@@ -7,6 +7,12 @@ import type {
   TorrentTrackerEntry,
 } from '@shared/domain/torrent'
 import { Icon } from '../../components/Icon'
+import {
+  RateLimitInput,
+  rateDraftFromBytes,
+  rateDraftToBytes,
+} from '../../components/RateLimitInput'
+import type { RateLimitDraft } from '../../components/RateLimitInput'
 import { formatBytes, formatEta, formatSpeed } from '../../lib/format'
 import { defaultTorrentDestination, torrentFolderName } from '../../lib/paths'
 
@@ -23,6 +29,7 @@ interface TorrentsPageProps {
   onStartSeeding: (jobId: string) => void
   onStopSeeding: (jobId: string) => void
   onRemoveJob: (jobId: string) => void
+  onCloseTorrent: (jobId: string) => void
   onOpenLocation: (jobId: string, revealFile: boolean) => void
   onFindMorePeers: (jobId: string) => void
   onVerifyTorrent: (jobId: string) => void
@@ -41,8 +48,8 @@ type DetailTab = 'files' | 'peers' | 'trackers' | 'discovery'
 interface SetupState {
   destination: string
   selected: Set<number>
-  downloadLimit: string
-  uploadLimit: string
+  downloadLimit: RateLimitDraft
+  uploadLimit: RateLimitDraft
   seedAfterComplete: boolean
 }
 
@@ -93,20 +100,6 @@ function isCompletedJob(job: DownloadJob): boolean {
   return job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled'
 }
 
-function rateToBytes(value: string): number | null | undefined {
-  const trimmed = value.trim()
-  if (trimmed === '') return null
-  const number = Number(trimmed)
-  if (!Number.isFinite(number) || number < 0) return undefined
-  return Math.round(number * 1024 * 1024)
-}
-
-function bytesToRate(value: number | null): string {
-  if (value === null || value <= 0) return ''
-  const megabytes = value / (1024 * 1024)
-  return String(Number.isInteger(megabytes) ? megabytes : Number(megabytes.toFixed(2)))
-}
-
 function effectiveRate(override: number | null, global: number): number {
   return override ?? global
 }
@@ -145,70 +138,117 @@ function TorrentListItem({
   job,
   selected,
   onSelect,
+  onPause,
+  onResume,
+  onClose,
 }: {
   job: DownloadJob
   selected: boolean
   onSelect: () => void
+  onPause: () => void
+  onResume: () => void
+  onClose: () => void
 }) {
   const details = torrentDetails(job)
   const percent = job.progress.percent
+  const canPause =
+    job.status === 'queued' ||
+    job.status === 'resolving' ||
+    job.status === 'downloading' ||
+    job.status === 'seeding'
+  const canResume = job.status === 'paused'
   return (
-    <button
-      type="button"
+    <div
       className={`torrent-list-item${selected ? ' torrent-list-item--selected' : ''}`}
-      onClick={onSelect}
       aria-current={selected ? 'true' : undefined}
     >
-      <div className="torrent-list-top">
-        <span className="torrent-list-title" title={job.title}>
-          {job.title}
-        </span>
-        <TorrentStatus job={job} />
-      </div>
-      {isSetupJob(job) ? (
-        <div className="torrent-list-meta">
-          <span>
-            {formatBytes(
-              job.progress.totalBytes ??
-                details?.files.reduce((sum, file) => sum + file.sizeBytes, 0) ??
-                0,
-            )}
+      <button type="button" className="torrent-list-main" onClick={onSelect}>
+        <div className="torrent-list-top">
+          <span className="torrent-list-title" title={job.title}>
+            {job.title}
           </span>
-          <span>{details?.files.length ?? 0} files</span>
+          <TorrentStatus job={job} />
         </div>
-      ) : job.status === 'seeding' ? (
-        <div className="torrent-list-meta">
-          <span>
-            ↑ {job.progress.bytesPerSecond ? formatSpeed(job.progress.bytesPerSecond) : '—'}
-          </span>
-          <span>
-            {details?.ratio !== null && details?.ratio !== undefined
-              ? `ratio ${details.ratio.toFixed(2)}`
-              : 'ratio —'}
-          </span>
-        </div>
-      ) : isCompletedJob(job) ? (
-        <div className="torrent-list-meta">
-          <span>{formatBytes(job.progress.totalBytes ?? 0)}</span>
-          <span>{job.status === 'completed' ? 'Verified pieces' : STATUS_LABELS[job.status]}</span>
-        </div>
-      ) : (
-        <>
-          <div className="progress-track progress-track--compact">
-            <span className="progress-fill" style={{ width: `${percent ?? 0}%` }} />
-          </div>
+        {isSetupJob(job) ? (
           <div className="torrent-list-meta">
-            <span>{percent === null ? '—' : `${Math.round(percent)}%`}</span>
             <span>
-              ↓ {job.progress.bytesPerSecond ? formatSpeed(job.progress.bytesPerSecond) : '—'}
+              {formatBytes(
+                job.progress.totalBytes ??
+                  details?.files.reduce((sum, file) => sum + file.sizeBytes, 0) ??
+                  0,
+              )}
+            </span>
+            <span>{details?.files.length ?? 0} files</span>
+          </div>
+        ) : job.status === 'seeding' ? (
+          <div className="torrent-list-meta">
+            <span>
+              ↑ {job.progress.bytesPerSecond ? formatSpeed(job.progress.bytesPerSecond) : '—'}
             </span>
             <span>
-              S {details?.seedsConnected ?? '—'} ({details?.seedsAvailable ?? '—'})
+              {details?.ratio !== null && details?.ratio !== undefined
+                ? `ratio ${details.ratio.toFixed(2)}`
+                : 'ratio —'}
             </span>
           </div>
-        </>
-      )}
-    </button>
+        ) : isCompletedJob(job) ? (
+          <div className="torrent-list-meta">
+            <span>{formatBytes(job.progress.totalBytes ?? 0)}</span>
+            <span>
+              {job.status === 'completed' ? 'Verified pieces' : STATUS_LABELS[job.status]}
+            </span>
+          </div>
+        ) : (
+          <>
+            <div className="progress-track progress-track--compact">
+              <span className="progress-fill" style={{ width: `${percent ?? 0}%` }} />
+            </div>
+            <div className="torrent-list-meta">
+              <span>{percent === null ? '—' : `${Math.round(percent)}%`}</span>
+              <span>
+                ↓ {job.progress.bytesPerSecond ? formatSpeed(job.progress.bytesPerSecond) : '—'}
+              </span>
+              <span>
+                S {details?.seedsConnected ?? '—'} ({details?.seedsAvailable ?? '—'})
+              </span>
+            </div>
+          </>
+        )}
+      </button>
+      <div className="torrent-list-actions">
+        {canResume ? (
+          <button
+            type="button"
+            className="torrent-list-icon"
+            onClick={onResume}
+            title={`Resume ${job.title}`}
+            aria-label={`Resume ${job.title}`}
+          >
+            <Icon name="play" size={13} />
+          </button>
+        ) : null}
+        {canPause ? (
+          <button
+            type="button"
+            className="torrent-list-icon"
+            onClick={onPause}
+            title={`Pause ${job.title}`}
+            aria-label={`Pause ${job.title}`}
+          >
+            <Icon name="pause" size={13} />
+          </button>
+        ) : null}
+        <button
+          type="button"
+          className="torrent-list-icon torrent-list-icon--danger"
+          onClick={onClose}
+          title={`Close ${job.title}`}
+          aria-label={`Close ${job.title}`}
+        >
+          <Icon name="x" size={13} />
+        </button>
+      </div>
+    </div>
   )
 }
 
@@ -399,6 +439,7 @@ export function TorrentsPage({
   onStartSeeding,
   onStopSeeding,
   onRemoveJob,
+  onCloseTorrent,
   onOpenLocation,
   onFindMorePeers,
   onVerifyTorrent,
@@ -413,8 +454,14 @@ export function TorrentsPage({
   const [setupError, setSetupError] = useState<string | null>(null)
   const [starting, setStarting] = useState(false)
   const [limitsOpen, setLimitsOpen] = useState(false)
-  const [liveDownloadLimit, setLiveDownloadLimit] = useState('')
-  const [liveUploadLimit, setLiveUploadLimit] = useState('')
+  const [liveDownloadLimit, setLiveDownloadLimit] = useState<RateLimitDraft>({
+    value: '',
+    unit: 'MB',
+  })
+  const [liveUploadLimit, setLiveUploadLimit] = useState<RateLimitDraft>({
+    value: '',
+    unit: 'MB',
+  })
 
   const torrents = useMemo(
     () =>
@@ -455,8 +502,8 @@ export function TorrentsPage({
     setSetup({
       destination: selected.destination,
       selected: new Set(details.files.filter((file) => file.selected).map((file) => file.index)),
-      downloadLimit: bytesToRate(details.downloadLimitBytesPerSecond),
-      uploadLimit: bytesToRate(details.uploadLimitBytesPerSecond),
+      downloadLimit: rateDraftFromBytes(details.downloadLimitBytesPerSecond),
+      uploadLimit: rateDraftFromBytes(details.uploadLimitBytesPerSecond),
       seedAfterComplete: details.seedAfterComplete,
     })
     setSetupError(null)
@@ -471,8 +518,8 @@ export function TorrentsPage({
       return
     }
     const details = torrentDetails(selected)
-    setLiveDownloadLimit(bytesToRate(details?.downloadLimitBytesPerSecond ?? null))
-    setLiveUploadLimit(bytesToRate(details?.uploadLimitBytesPerSecond ?? null))
+    setLiveDownloadLimit(rateDraftFromBytes(details?.downloadLimitBytesPerSecond ?? null))
+    setLiveUploadLimit(rateDraftFromBytes(details?.uploadLimitBytesPerSecond ?? null))
     // Initialize only when the selected torrent or its status changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.id, selected?.status])
@@ -507,10 +554,10 @@ export function TorrentsPage({
 
   const startDownload = async (): Promise<void> => {
     if (!selected || !setup) return
-    const downloadLimit = rateToBytes(setup.downloadLimit)
-    const uploadLimit = rateToBytes(setup.uploadLimit)
+    const downloadLimit = rateDraftToBytes(setup.downloadLimit)
+    const uploadLimit = rateDraftToBytes(setup.uploadLimit)
     if (downloadLimit === undefined || uploadLimit === undefined) {
-      setSetupError('Speed limits must be positive numbers in MB/s, or blank for global.')
+      setSetupError('Speed limits must be positive numbers, or blank to use the global limit.')
       return
     }
     if (setup.selected.size === 0) {
@@ -539,8 +586,8 @@ export function TorrentsPage({
 
   const saveLiveLimits = (): void => {
     if (!selected) return
-    const downloadLimit = rateToBytes(liveDownloadLimit)
-    const uploadLimit = rateToBytes(liveUploadLimit)
+    const downloadLimit = rateDraftToBytes(liveDownloadLimit)
+    const uploadLimit = rateDraftToBytes(liveUploadLimit)
     if (downloadLimit === undefined || uploadLimit === undefined) return
     onSetTorrentLimits(selected.id, downloadLimit, uploadLimit)
     setLimitsOpen(false)
@@ -635,6 +682,19 @@ export function TorrentsPage({
                         onSelectJob(job.id)
                         setDetailTab('files')
                       }}
+                      onPause={() => onPauseJob(job.id)}
+                      onResume={() => onResumeJob(job.id)}
+                      onClose={() => {
+                        const message =
+                          job.status === 'setup'
+                            ? 'Discard this torrent setup?'
+                            : job.status === 'completed' ||
+                                job.status === 'failed' ||
+                                job.status === 'cancelled'
+                              ? 'Remove this torrent from the list? Downloaded files stay on disk.'
+                              : 'Close this torrent? Partial files stay on disk.'
+                        if (window.confirm(message)) onCloseTorrent(job.id)
+                      }}
                     />
                   ))}
                 </div>
@@ -685,24 +745,14 @@ export function TorrentsPage({
                     </button>
                   ) : selected.status === 'downloading' ||
                     selected.status === 'queued' ||
-                    selected.status === 'resolving' ? (
+                    selected.status === 'resolving' ||
+                    selected.status === 'seeding' ? (
                     <button
                       type="button"
                       className="button button--secondary button--small"
                       onClick={() => onPauseJob(selected.id)}
                     >
                       <Icon name="pause" size={15} /> Pause
-                    </button>
-                  ) : null}
-                  {!isSetupJob(selected) &&
-                  selected.status !== 'seeding' &&
-                  !isCompletedJob(selected) ? (
-                    <button
-                      type="button"
-                      className="button button--ghost button--small"
-                      onClick={() => onCancelJob(selected.id)}
-                    >
-                      <Icon name="stop" size={15} /> Stop
                     </button>
                   ) : null}
                   {selected.status === 'seeding' ? (
@@ -820,34 +870,20 @@ export function TorrentsPage({
                       <span>Blank uses the global limit</span>
                     </div>
                     <div className="torrent-limit-grid">
-                      <label>
-                        <span>Download MB/s</span>
-                        <input
-                          className="text-input"
-                          inputMode="decimal"
-                          placeholder={
-                            bytesToRate(settings.maxDownloadRateBytesPerSecond) || 'Unlimited'
-                          }
-                          value={setup.downloadLimit}
-                          onChange={(event) =>
-                            setSetup({ ...setup, downloadLimit: event.target.value })
-                          }
-                        />
-                      </label>
-                      <label>
-                        <span>Upload MB/s</span>
-                        <input
-                          className="text-input"
-                          inputMode="decimal"
-                          placeholder={
-                            bytesToRate(settings.maxUploadRateBytesPerSecond) || 'Unlimited'
-                          }
-                          value={setup.uploadLimit}
-                          onChange={(event) =>
-                            setSetup({ ...setup, uploadLimit: event.target.value })
-                          }
-                        />
-                      </label>
+                      <RateLimitInput
+                        id="torrent-setup-download-limit"
+                        label="Download"
+                        value={setup.downloadLimit}
+                        placeholderBytes={settings.maxDownloadRateBytesPerSecond}
+                        onChange={(value) => setSetup({ ...setup, downloadLimit: value })}
+                      />
+                      <RateLimitInput
+                        id="torrent-setup-upload-limit"
+                        label="Upload"
+                        value={setup.uploadLimit}
+                        placeholderBytes={settings.maxUploadRateBytesPerSecond}
+                        onChange={(value) => setSetup({ ...setup, uploadLimit: value })}
+                      />
                     </div>
                   </section>
 
@@ -1033,28 +1069,20 @@ export function TorrentsPage({
                     </div>
                     {limitsOpen ? (
                       <div className="torrent-live-limit-form">
-                        <label>
-                          <span>Download MB/s</span>
-                          <input
-                            className="text-input"
-                            value={liveDownloadLimit}
-                            placeholder={
-                              bytesToRate(settings.maxDownloadRateBytesPerSecond) || 'Unlimited'
-                            }
-                            onChange={(event) => setLiveDownloadLimit(event.target.value)}
-                          />
-                        </label>
-                        <label>
-                          <span>Upload MB/s</span>
-                          <input
-                            className="text-input"
-                            value={liveUploadLimit}
-                            placeholder={
-                              bytesToRate(settings.maxUploadRateBytesPerSecond) || 'Unlimited'
-                            }
-                            onChange={(event) => setLiveUploadLimit(event.target.value)}
-                          />
-                        </label>
+                        <RateLimitInput
+                          id="torrent-live-download-limit"
+                          label="Download"
+                          value={liveDownloadLimit}
+                          placeholderBytes={settings.maxDownloadRateBytesPerSecond}
+                          onChange={setLiveDownloadLimit}
+                        />
+                        <RateLimitInput
+                          id="torrent-live-upload-limit"
+                          label="Upload"
+                          value={liveUploadLimit}
+                          placeholderBytes={settings.maxUploadRateBytesPerSecond}
+                          onChange={setLiveUploadLimit}
+                        />
                         <button
                           type="button"
                           className="button button--secondary button--small"
@@ -1113,6 +1141,24 @@ export function TorrentsPage({
                       <DiscoveryPanel details={selectedDetails} />
                     ) : null}
                   </section>
+
+                  {!isSetupJob(selected) && !isCompletedJob(selected) ? (
+                    <div className="torrent-danger-zone">
+                      <button
+                        type="button"
+                        className="link-button torrent-remove-link"
+                        onClick={() => {
+                          const message =
+                            selected.status === 'seeding'
+                              ? 'Remove this torrent? Seeding will stop and partial files stay on disk.'
+                              : 'Remove this torrent? Partial files stay on disk.'
+                          if (window.confirm(message)) onCancelJob(selected.id)
+                        }}
+                      >
+                        Remove torrent
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
               )}
 

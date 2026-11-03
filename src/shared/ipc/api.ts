@@ -50,7 +50,8 @@ export interface NexFetchApi {
     cancelPreview(requestId: string): Promise<Result<null>>
   }
   torrent: {
-    chooseFile(): Promise<Result<TorrentPreviewEnvelope | null>>
+    chooseFile(): Promise<Result<string | null>>
+    previewFile(path: string, requestId: string): Promise<Result<TorrentPreviewEnvelope>>
     previewBytes(
       requestId: string,
       name: string,
