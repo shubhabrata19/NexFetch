@@ -93,7 +93,7 @@ The first release is quality-first:
 
 ## Prerequisites
 
-- Node.js 22.12 or newer.
+- Node.js 24 or newer (development and tests; Electron 45 ships Node 24).
 - npm.
 - Runtime tools:
   - `yt-dlp`
