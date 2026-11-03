@@ -266,8 +266,9 @@ resources/    bundled binaries and licenses (binaries ignored by Git)
 - Filename conflicts are resolved without silent overwrites.
 - Torrent metadata is treated as untrusted: file paths, tracker URLs, file
   counts, and metadata size are validated before a job is created.
-- Tracker URLs are limited to HTTP/HTTPS/UDP from the `.torrent`; trackers that
-  resolve to private or local hosts are rejected. Web seeds are disabled.
+- Torrent metadata is sanitized before use: trackers that resolve to private or
+  local hosts, unsupported tracker schemes, web seeds, and torrent-provided DHT
+  nodes are stripped without changing the info hash.
 - Protocol encryption is enabled; DHT/PEX/LSD are automatically disabled for
   private torrents.
 - Router port mapping uses NAT-PMP/UPnP only when enabled in Settings, maps one

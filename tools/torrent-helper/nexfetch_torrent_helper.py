@@ -28,6 +28,7 @@ import re
 import shutil
 import socket
 import sys
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -46,6 +47,8 @@ MAX_FILES = 20_000
 MAX_PEERS_REPORTED = 120
 UPDATE_INTERVAL_SECONDS = 0.75
 RESOLVE_TIMEOUT_SECONDS = 180
+MAX_BENCODE_DEPTH = 64
+_tracker_safety_cache: Dict[str, bool] = {}
 EXECUTABLE_EXTENSIONS = {
     ".exe",
     ".msi",
@@ -183,6 +186,174 @@ def validate_tracker_url(value: str) -> Tuple[bool, Optional[str]]:
     if not validate_remote_host(parsed.hostname):
         return False, "tracker points at a private or local host"
     return True, None
+
+
+class BencodeError(Exception):
+    pass
+
+
+def bdecode(data: bytes) -> Any:
+    def parse(index: int, depth: int) -> Tuple[Any, int]:
+        if depth > MAX_BENCODE_DEPTH:
+            raise BencodeError("bencode nesting is too deep")
+        if index >= len(data):
+            raise BencodeError("unexpected end of bencode data")
+        marker = data[index : index + 1]
+        if marker == b"i":
+            end = data.find(b"e", index + 1)
+            if end == -1:
+                raise BencodeError("unterminated bencode integer")
+            text = data[index + 1 : end]
+            if not re.fullmatch(rb"-?(0|[1-9][0-9]*)", text):
+                raise BencodeError("invalid bencode integer")
+            return int(text), end + 1
+        if marker == b"l":
+            items: List[Any] = []
+            cursor = index + 1
+            while cursor < len(data) and data[cursor : cursor + 1] != b"e":
+                item, cursor = parse(cursor, depth + 1)
+                items.append(item)
+            if cursor >= len(data):
+                raise BencodeError("unterminated bencode list")
+            return items, cursor + 1
+        if marker == b"d":
+            result: Dict[bytes, Any] = {}
+            cursor = index + 1
+            while cursor < len(data) and data[cursor : cursor + 1] != b"e":
+                key, cursor = parse(cursor, depth + 1)
+                if not isinstance(key, bytes):
+                    raise BencodeError("bencode dictionary key is not a byte string")
+                if key in result:
+                    raise BencodeError("duplicate bencode dictionary key")
+                value, cursor = parse(cursor, depth + 1)
+                result[key] = value
+            if cursor >= len(data):
+                raise BencodeError("unterminated bencode dictionary")
+            return result, cursor + 1
+        if marker.isdigit():
+            colon = data.find(b":", index)
+            if colon == -1:
+                raise BencodeError("invalid bencode string length")
+            length_text = data[index:colon]
+            if not re.fullmatch(rb"0|[1-9][0-9]*", length_text):
+                raise BencodeError("invalid bencode string length")
+            length = int(length_text)
+            start = colon + 1
+            end = start + length
+            if end > len(data):
+                raise BencodeError("bencode string exceeds the file")
+            return data[start:end], end
+        raise BencodeError("invalid bencode value")
+
+    value, cursor = parse(0, 0)
+    if cursor != len(data):
+        raise BencodeError("trailing data after bencode value")
+    return value
+
+
+def bencode(value: Any) -> bytes:
+    if isinstance(value, bytes):
+        return str(len(value)).encode("ascii") + b":" + value
+    if isinstance(value, str):
+        return bencode(value.encode("utf-8"))
+    if isinstance(value, bool):
+        return bencode(int(value))
+    if isinstance(value, int):
+        return b"i" + str(value).encode("ascii") + b"e"
+    if isinstance(value, list):
+        return b"l" + b"".join(bencode(item) for item in value) + b"e"
+    if isinstance(value, dict):
+        encoded_items = []
+        for key, item in value.items():
+            if isinstance(key, str):
+                key = key.encode("utf-8")
+            if not isinstance(key, bytes):
+                raise BencodeError("bencode dictionary key must be bytes")
+            encoded_items.append((key, bencode(key) + bencode(item)))
+        encoded_items.sort(key=lambda entry: entry[0])
+        return b"d" + b"".join(encoded for _key, encoded in encoded_items) + b"e"
+    raise BencodeError("unsupported bencode value")
+
+
+def tracker_url_safe(value: bytes) -> bool:
+    try:
+        url = value.decode("utf-8")
+    except UnicodeDecodeError:
+        return False
+    cached = _tracker_safety_cache.get(url)
+    if cached is not None:
+        return cached
+    valid, _reason = validate_tracker_url(url)
+    _tracker_safety_cache[url] = valid
+    return valid
+
+
+def sanitize_torrent_bytes(raw: bytes) -> bytes:
+    decoded = bdecode(raw)
+    if not isinstance(decoded, dict):
+        raise BencodeError("torrent root is not a dictionary")
+
+    # Web seeds are never used.
+    decoded.pop(b"url-list", None)
+    decoded.pop(b"httpseeds", None)
+    # Torrent-provided DHT nodes are unnecessary and can target local services.
+    decoded.pop(b"nodes", None)
+
+    announce = decoded.get(b"announce")
+    if isinstance(announce, bytes) and not tracker_url_safe(announce):
+        decoded.pop(b"announce", None)
+
+    announce_list = decoded.get(b"announce-list")
+    if isinstance(announce_list, list):
+        tiers: List[List[bytes]] = []
+        for tier in announce_list:
+            if not isinstance(tier, list):
+                continue
+            safe = [
+                url
+                for url in tier
+                if isinstance(url, bytes) and tracker_url_safe(url)
+            ]
+            if safe:
+                tiers.append(safe)
+        if tiers:
+            decoded[b"announce-list"] = tiers
+        else:
+            decoded.pop(b"announce-list", None)
+
+    return bencode(decoded)
+
+
+def sanitize_torrent_file(source_path: str, output_path: str) -> Any:
+    try:
+        with open(source_path, "rb") as source:
+            raw = source.read(MAX_TORRENT_BYTES + 1)
+    except OSError:
+        raise HelperError("TORRENT_INVALID", "The torrent file could not be read.")
+    if len(raw) <= 0 or len(raw) > MAX_TORRENT_BYTES:
+        raise HelperError("TORRENT_INVALID", "The torrent file is empty or too large.")
+    try:
+        safe_bytes = sanitize_torrent_bytes(raw)
+    except BencodeError:
+        raise HelperError("TORRENT_INVALID", "This file is not a valid .torrent file.")
+
+    try:
+        original = safe_torrent_info(source_path)
+        with open(output_path, "wb") as output:
+            output.write(safe_bytes)
+        sanitized = safe_torrent_info(output_path)
+        if torrent_hash_info(original) != torrent_hash_info(sanitized):
+            raise HelperError(
+                "TORRENT_UNSAFE",
+                "The torrent metadata could not be sanitized without changing its identity.",
+            )
+        return sanitized
+    except Exception:
+        try:
+            os.remove(output_path)
+        except OSError:
+            pass
+        raise
 
 
 def safe_path(path: str) -> bool:
@@ -569,10 +740,16 @@ class Session:
                 "natMapping": self.settings.get("natMapping"),
             }
 
-    def inspect(self, path: str) -> Dict[str, Any]:
+    def inspect(self, path: str, output_path: Optional[str] = None) -> Dict[str, Any]:
         with self.lock:
-            ti = safe_torrent_info(path)
-            return preview_from_ti(ti, "file")
+            if output_path:
+                ti = sanitize_torrent_file(path, output_path)
+                from_path = output_path
+            else:
+                ti = safe_torrent_info(path)
+                from_path = path
+            preview = preview_from_ti(ti, "file")
+            return {**preview, "metadataPath": from_path}
 
     def resolve_start(self, params: Dict[str, Any]) -> Dict[str, Any]:
         request_id = str(params.get("requestId", ""))
@@ -631,11 +808,11 @@ class Session:
         with self.lock:
             session = self.ensure_session(params)
             metadata_path = str(params.get("metadataPath", ""))
-            ti = safe_torrent_info(metadata_path)
-            info_hash, version = torrent_hash_info(ti)
+            original_ti = safe_torrent_info(metadata_path)
+            info_hash, version = torrent_hash_info(original_ti)
             file_indices = as_int_list(params.get("fileIndices"))
             if not file_indices:
-                file_indices = list(range(ti.num_files()))
+                file_indices = list(range(original_ti.num_files()))
 
             if info_hash in self.torrents:
                 runtime = self.torrents[info_hash]
@@ -649,29 +826,47 @@ class Session:
                     runtime.handle.resume()
                 return self.torrent_payload(runtime)
 
-            add_params = lt.add_torrent_params()
-            add_params.ti = ti
-            add_params.save_path = str(params.get("savePath", ""))
-            add_params.flags &= ~lt.torrent_flags.paused
-            add_params.max_connections = int(
-                self.settings.get("perTorrentConnections", 100) or 100
+            handle = None
+            temp_fd, temp_path = tempfile.mkstemp(
+                prefix="nexfetch-sanitized-",
+                suffix=".torrent",
+                dir=os.path.dirname(metadata_path) or None,
             )
-            download_limit = as_int(params.get("downloadLimitBytesPerSecond"), 0) or 0
-            upload_limit = as_int(params.get("uploadLimitBytesPerSecond"), 0) or 0
-            add_params.download_limit = download_limit
-            add_params.upload_limit = upload_limit
-            if bool(ti.priv()):
-                add_params.flags |= (
-                    lt.torrent_flags.disable_dht
-                    | lt.torrent_flags.disable_pex
-                    | lt.torrent_flags.disable_lsd
-                )
-            priorities = [1 if index in file_indices else 0 for index in range(ti.num_files())]
-            add_params.file_priorities = priorities
+            os.close(temp_fd)
             try:
-                handle = session.add_torrent(add_params)
-            except Exception as exc:
-                raise HelperError("TORRENT_INVALID", f"The torrent could not be started: {exc}")
+                ti = sanitize_torrent_file(metadata_path, temp_path)
+                add_params = lt.add_torrent_params()
+                add_params.ti = ti
+                add_params.save_path = str(params.get("savePath", ""))
+                add_params.flags &= ~lt.torrent_flags.paused
+                add_params.max_connections = int(
+                    self.settings.get("perTorrentConnections", 100) or 100
+                )
+                download_limit = as_int(params.get("downloadLimitBytesPerSecond"), 0) or 0
+                upload_limit = as_int(params.get("uploadLimitBytesPerSecond"), 0) or 0
+                add_params.download_limit = download_limit
+                add_params.upload_limit = upload_limit
+                if bool(ti.priv()):
+                    add_params.flags |= (
+                        lt.torrent_flags.disable_dht
+                        | lt.torrent_flags.disable_pex
+                        | lt.torrent_flags.disable_lsd
+                    )
+                priorities = [
+                    1 if index in file_indices else 0 for index in range(ti.num_files())
+                ]
+                add_params.file_priorities = priorities
+                try:
+                    handle = session.add_torrent(add_params)
+                except Exception as exc:
+                    raise HelperError(
+                        "TORRENT_INVALID", f"The torrent could not be started: {exc}"
+                    )
+            finally:
+                try:
+                    os.remove(temp_path)
+                except OSError:
+                    pass
 
             runtime = TorrentRuntime(handle, metadata_path, ti.name() or "Torrent", params)
             runtime.selected = set(file_indices)
@@ -1158,7 +1353,11 @@ def handle_request(session: Session, request: Dict[str, Any]) -> None:
                 "natStatus": session.nat_status,
             }
         elif method == "torrent.inspect":
-            result = session.inspect(str(params.get("path", "")))
+            output_path = params.get("outputPath")
+            result = session.inspect(
+                str(params.get("path", "")),
+                str(output_path) if isinstance(output_path, str) and output_path else None,
+            )
         elif method == "torrent.resolve_start":
             result = session.resolve_start(params)
         elif method == "torrent.resolve_cancel":

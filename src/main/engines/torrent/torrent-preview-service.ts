@@ -37,8 +37,14 @@ export class TorrentPreviewService {
     }
 
     if (signal.aborted) throw new DomainError('CANCELLED', 'Torrent preview cancelled.')
-    const preview = await this.engine.inspectFile(path)
-    return this.storePreview(preview, path, signal)
+    await mkdir(this.cacheDirectory, { recursive: true })
+    const sanitizedPath = join(this.cacheDirectory, `incoming-${randomUUID()}.torrent`)
+    try {
+      const preview = await this.engine.inspectFile(path, sanitizedPath)
+      return await this.storePreview(preview, sanitizedPath, signal)
+    } finally {
+      await rm(sanitizedPath, { force: true }).catch(() => undefined)
+    }
   }
 
   async previewBytes(
@@ -61,13 +67,15 @@ export class TorrentPreviewService {
 
     await mkdir(this.cacheDirectory, { recursive: true })
     const temporaryPath = join(this.cacheDirectory, `incoming-${randomUUID()}.torrent`)
+    const sanitizedPath = join(this.cacheDirectory, `sanitized-${randomUUID()}.torrent`)
     try {
       await writeFile(temporaryPath, data, { flag: 'wx' })
       if (signal.aborted) throw new DomainError('CANCELLED', 'Torrent preview cancelled.')
-      const preview = await this.engine.inspectFile(temporaryPath)
-      return await this.storePreview(preview, temporaryPath, signal)
+      const preview = await this.engine.inspectFile(temporaryPath, sanitizedPath)
+      return await this.storePreview(preview, sanitizedPath, signal)
     } finally {
       await rm(temporaryPath, { force: true }).catch(() => undefined)
+      await rm(sanitizedPath, { force: true }).catch(() => undefined)
     }
   }
 

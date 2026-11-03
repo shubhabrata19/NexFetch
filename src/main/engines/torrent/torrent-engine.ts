@@ -167,9 +167,9 @@ export class TorrentEngine implements DownloadEngine {
     }
   }
 
-  async inspectFile(path: string): Promise<TorrentPreview> {
+  async inspectFile(path: string, outputPath: string): Promise<TorrentPreview> {
     try {
-      return await this.helper.inspect(path)
+      return await this.helper.inspect(path, outputPath)
     } catch (error) {
       throw this.toDomainError(error)
     }

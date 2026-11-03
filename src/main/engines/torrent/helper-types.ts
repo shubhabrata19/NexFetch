@@ -48,6 +48,7 @@ export interface HelperPreview {
   createdBy: string | null
   comment: string | null
   webSeedCount: number
+  metadataPath?: string
 }
 
 export interface HelperResolveProgress {

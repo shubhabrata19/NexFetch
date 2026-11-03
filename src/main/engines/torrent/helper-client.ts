@@ -111,8 +111,8 @@ export class TorrentHelperClient {
     )
   }
 
-  async inspect(path: string): Promise<HelperPreview> {
-    return this.request<HelperPreview>('torrent.inspect', { path }, 30_000)
+  async inspect(path: string, outputPath: string): Promise<HelperPreview> {
+    return this.request<HelperPreview>('torrent.inspect', { path, outputPath }, 60_000)
   }
 
   async resolveInfoHash(
