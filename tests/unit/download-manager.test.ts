@@ -13,6 +13,7 @@ import type {
 import type { DownloadSource } from '@shared/domain/job'
 import { DownloadManager } from '@main/download/download-manager'
 import { JsonJobRepository } from '@main/download/job-repository'
+import type { PersistedJobRecord } from '@main/download/job-repository'
 import { PreviewCache } from '@main/download/preview-cache'
 import { EngineRegistry } from '@main/engines/registry'
 import type { DependencyService } from '@main/services/dependency-service'
@@ -43,9 +44,13 @@ const capabilities: EngineCapabilities = {
 
 const temporaryDirectories: string[] = []
 
-function createFixture(initialMode: 'complete' | 'hang'): {
+function createFixture(
+  initialMode: 'complete' | 'hang',
+  options: { pauseResume?: boolean; resumeAfterRestart?: boolean } = {},
+): {
   manager: DownloadManager
   settings: SettingsService
+  jobs: JsonJobRepository
   destination: string
   previewToken: string
   jobEvents: string[]
@@ -64,7 +69,11 @@ function createFixture(initialMode: 'complete' | 'hang'): {
   const engine: DownloadEngine = {
     id: 'fake',
     displayName: 'Fake',
-    capabilities,
+    capabilities: {
+      ...capabilities,
+      pauseResume: options.pauseResume ?? false,
+      resumeAfterRestart: options.resumeAfterRestart ?? false,
+    },
     match: (input) =>
       input.kind === 'text' && input.value === 'fake:'
         ? { kind: 'supported', source, priority: 100 }
@@ -114,9 +123,10 @@ function createFixture(initialMode: 'complete' | 'hang'): {
   const previewToken = previews.put(preview).token
 
   const jobEvents: string[] = []
+  const jobs = new JsonJobRepository(join(directory, 'jobs.json'))
   const manager = new DownloadManager({
     registry,
-    jobs: new JsonJobRepository(join(directory, 'jobs.json')),
+    jobs,
     settings,
     files: new FileService(),
     verifier: {} as MediaVerifier,
@@ -132,12 +142,45 @@ function createFixture(initialMode: 'complete' | 'hang'): {
   return {
     manager,
     settings,
+    jobs,
     destination,
     previewToken,
     jobEvents,
     setMode: (mode) => {
       state.mode = mode
     },
+  }
+}
+
+function persistedJob(overrides: Partial<PersistedJobRecord> = {}): PersistedJobRecord {
+  const now = new Date().toISOString()
+  return {
+    id: 'recovered-job',
+    revision: 1,
+    engineId: 'fake',
+    source,
+    title: 'Recovered job',
+    status: 'queued',
+    progress: {
+      downloadedBytes: 10,
+      totalBytes: 100,
+      percent: 10,
+      bytesPerSecond: 5,
+      etaSeconds: 18,
+    },
+    destination: 'C:\\downloads',
+    output: null,
+    details: null,
+    error: null,
+    attempt: 1,
+    createdAt: now,
+    updatedAt: now,
+    startedAt: now,
+    completedAt: null,
+    scheduledAt: null,
+    selection: null,
+    workspaceDirectory: null,
+    ...overrides,
   }
 }
 
@@ -167,6 +210,7 @@ describe('download manager', () => {
     })
 
     await waitFor(() => fixture.manager.getJob(job.id)?.status === 'completed')
+    await waitFor(() => fixture.jobEvents.some((event) => event.endsWith(':completed')))
     const completed = fixture.manager.getJob(job.id)
     expect(completed?.progress.percent).toBe(100)
     expect(completed?.output?.files[0]?.path).toBe(join(fixture.destination, 'fake-output.mp4'))
@@ -216,5 +260,77 @@ describe('download manager', () => {
     expect(existsSync(completed?.output?.files[0]?.path ?? '')).toBe(true)
     await fixture.manager.removeJob(job.id)
     await fixture.manager.shutdown()
+  })
+
+  it('pauses and resumes a capable job without deleting its workspace', async () => {
+    const fixture = createFixture('hang', { pauseResume: true })
+    const job = await fixture.manager.createJob({
+      previewToken: fixture.previewToken,
+      selection: { mode: 'best-up-to-4k' },
+      destination: fixture.destination,
+    })
+
+    await waitFor(() => fixture.manager.getJob(job.id)?.status === 'downloading')
+    const paused = await fixture.manager.pauseJob(job.id)
+    expect(paused.status).toBe('paused')
+    expect(existsSync(join(fixture.destination, '.nexfetch-tmp', job.id))).toBe(true)
+
+    fixture.setMode('complete')
+    const resumed = await fixture.manager.resumeJob(job.id)
+    expect(['queued', 'resolving', 'downloading']).toContain(resumed.status)
+    await waitFor(() => fixture.manager.getJob(job.id)?.status === 'completed')
+    await fixture.manager.shutdown()
+  })
+
+  it('starts a scheduled job when its time arrives', async () => {
+    const fixture = createFixture('complete')
+    const job = await fixture.manager.createJob({
+      previewToken: fixture.previewToken,
+      selection: { mode: 'best-up-to-4k' },
+      destination: fixture.destination,
+      scheduledAt: new Date(Date.now() + 150).toISOString(),
+    })
+
+    expect(job.status).toBe('queued')
+    await waitFor(() => fixture.manager.getJob(job.id)?.status === 'completed', 4000)
+    await fixture.manager.shutdown()
+  })
+
+  it('recovers resumable interrupted jobs and fails non-resumable ones', () => {
+    const resumable = createFixture('complete', { resumeAfterRestart: true })
+    resumable.jobs.save(
+      persistedJob({
+        id: 'resumable',
+        status: 'downloading',
+        workspaceDirectory: join(resumable.destination, '.nexfetch-tmp', 'resumable'),
+      }),
+    )
+    resumable.manager.recoverInterruptedJobs()
+    expect(resumable.manager.getJob('resumable')?.status).toBe('queued')
+
+    const nonResumable = createFixture('complete')
+    nonResumable.jobs.save(
+      persistedJob({
+        id: 'not-resumable',
+        status: 'downloading',
+        workspaceDirectory: null,
+      }),
+    )
+    nonResumable.manager.recoverInterruptedJobs()
+    expect(nonResumable.manager.getJob('not-resumable')?.status).toBe('failed')
+
+    void resumable.manager.shutdown()
+    void nonResumable.manager.shutdown()
+  })
+
+  it('leaves queued and paused jobs untouched during recovery', () => {
+    const fixture = createFixture('complete')
+    fixture.jobs.save(persistedJob({ id: 'queued', status: 'queued' }))
+    fixture.jobs.save(persistedJob({ id: 'paused', status: 'paused' }))
+
+    fixture.manager.recoverInterruptedJobs()
+    expect(fixture.manager.getJob('queued')?.status).toBe('queued')
+    expect(fixture.manager.getJob('paused')?.status).toBe('paused')
+    void fixture.manager.shutdown()
   })
 })

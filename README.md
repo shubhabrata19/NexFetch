@@ -4,19 +4,25 @@ NexFetch is a modern desktop download manager designed to grow from a focused
 YouTube downloader into a universal download manager with independent protocol
 engines.
 
-This repository currently contains the **YouTube MVP foundation**:
+This repository currently contains the **universal manager core** with two
+working engines:
 
 - Secure Electron shell with strongly typed IPC.
-- YouTube URL validation, metadata preview, and actual format discovery.
-- Quality-first 4K selection and format list.
-- Real download queue with progress, cancellation, retry, completion, and history.
-- Polished desktop UI with a persistent activity queue, sidebar download controls,
-  system-aware light/dark themes, and motion that respects reduced-motion settings.
-- ffprobe verification of the merged output.
+- YouTube URL validation, metadata preview, actual format discovery, and
+  quality-first 4K selection.
+- Direct HTTP/HTTPS downloads with redirects, Range resume, pause/resume,
+  optional SHA-256 verification, and unknown-length support.
+- SQLite-backed job and settings persistence with automatic JSON migration.
+- Real download queue with scheduling, progress, cancellation, retry,
+  completion, and history filters.
+- Polished desktop UI with a persistent activity queue, source tabs,
+  system-aware light/dark themes, and motion that respects reduced-motion
+  settings.
+- ffprobe verification of merged YouTube output.
 - Bundled yt-dlp/FFmpeg binary detection for packaged builds.
 
-HTTP/HTTPS and BitTorrent remain later phases. Their controls are not shown until
-those engines exist.
+BitTorrent remains a later phase. Its controls are not shown until that engine
+exists.
 
 ## Current status
 
@@ -37,8 +43,17 @@ those engines exist.
   filenames.
 - ffprobe verification of resolution and audio presence before a job is marked
   complete.
-- Persistent job history and settings in local JSON stores behind repository
-  interfaces. SQLite migration is planned for the universal-manager phase.
+- Direct HTTP/HTTPS downloads with a HEAD-first probe, bounded redirects,
+  Content-Disposition filename parsing, MIME-aware extensions, and HTML-page
+  rejection.
+- Range-based resume with ETag/Last-Modified validation, safe restart when a
+  server ignores Range, unknown content length, and a resume sidecar.
+- User-facing pause/resume for direct downloads; YouTube remains cancel/retry.
+- Optional per-job SHA-256 checksum verification.
+- One-time scheduling with automatic startup of due and missed jobs.
+- SQLite-backed jobs, attempts, and settings using Electron's built-in
+  `node:sqlite` driver. Existing JSON jobs and settings migrate automatically.
+- Historical direct-file and YouTube jobs can be filtered in History.
 - Persistent right-side activity queue with compact progress cards for active,
   queued, and recent downloads.
 - Sidebar active-download module with per-job stop controls and queue navigation.
@@ -57,9 +72,9 @@ Not implemented yet:
 
 - User-facing pause/resume for YouTube downloads.
 - Playlist/channel/live-stream downloads.
-- HTTP/HTTPS engine.
 - BitTorrent engine.
-- Scheduling, notifications, and auto-update.
+- Notifications and auto-update.
+- Proxy configuration, custom headers, cookies, or authenticated HTTP downloads.
 - Public third-party plugins or a marketplace.
 
 ## 4K quality policy
@@ -84,6 +99,9 @@ The first release is quality-first:
   - `yt-dlp`
   - `ffmpeg`
   - `ffprobe`
+
+SQLite is embedded through Electron's built-in `node:sqlite` module. There is no
+database server, daemon, port, or native module to rebuild.
 
 Development builds look in `resources/bin/<platform>-<arch>/`, then `PATH`, and
 allow `NXF_YTDLP_PATH`, `NXF_FFMPEG_PATH`, and `NXF_FFPROBE_PATH` overrides.
@@ -127,14 +145,14 @@ npm run icons        # regenerate platform icons
 The current Windows review build is produced with:
 
 ```bash
-npx electron-builder --win nsis -c.directories.output=release/v0.3.3
+npx electron-builder --win nsis -c.directories.output=release/v0.4.0
 ```
 
 Outputs:
 
 ```text
-release/v0.3.3/NexFetch Setup 0.3.3.exe
-release/v0.3.3/win-unpacked/NexFetch.exe
+release/v0.4.0/NexFetch Setup 0.4.0.exe
+release/v0.4.0/win-unpacked/NexFetch.exe
 ```
 
 The installer is currently unsigned, so Windows SmartScreen may warn. The
@@ -143,11 +161,15 @@ brand asset from `resources/assets`.
 
 ## Interface
 
-- The main downloads workspace keeps the YouTube URL flow, preview, format
-  chooser, pinned download action, and activity queue visible together.
+- The downloads workspace has YouTube and Direct file tabs. Both keep the URL
+  flow, preview, pinned download action, and activity queue visible together.
+- Direct file previews show the final host, filename, content type, reported
+  size, resume support, an optional SHA-256 checksum, and an optional start time.
 - The activity rail shows compact cards with a two-line title, status, percent,
   speed, downloaded/total size, ETA, and progress bar. Actions use icon buttons
-  for stop, restart, open folder, and clear.
+  for pause/resume where supported, stop, restart, open folder, and clear.
+- Direct downloads expose pause and resume. YouTube jobs expose cancel and retry.
+- History filters records by All, Files, or Videos without deleting output files.
 - The sidebar shows up to two active downloads with thumbnails, progress, speed,
   and stop controls. When idle it collapses to a single “No active downloads”
   line.
@@ -181,6 +203,9 @@ explicit light or dark preference, and Settings offers System, Light, and Dark.
 ```text
 src/
   main/       Electron main process, IPC, services, engine registry, queue
+    download/ job manager, preview cache, generic preview service
+    engines/  YouTube and HTTP/HTTPS adapters
+    storage/  SQLite schema, repositories, JSON migration
   preload/    narrow contextBridge API
   renderer/   React UI
   shared/     domain models, IPC contracts, validation, pure policy code
@@ -208,6 +233,11 @@ resources/    bundled binaries and licenses (binaries ignored by Git)
 - Strict CSP; remote code is not allowed.
 - External navigation and new windows are blocked.
 - YouTube URLs are host-validated and canonicalized before use.
+- HTTP links are restricted to `http:` and `https:`; embedded credentials are
+  rejected, redirects are bounded and revalidated, and HTML pages are not saved
+  as files.
+- HTTP filenames are sanitized, path traversal is rejected, and Range requests
+  are validated before appending to a partial file.
 - Output paths remain inside the user-selected destination.
 - Filename conflicts are resolved without silent overwrites.
 - No cookies, credentials, DRM circumvention, paywall bypass, private-video
@@ -216,16 +246,13 @@ resources/    bundled binaries and licenses (binaries ignored by Git)
 
 ## Next milestone
 
-Phase 3 — universal manager core and HTTP/HTTPS:
+Phase 3 is implemented. The remaining release work is:
 
-1. Replace the JSON job repository with SQLite behind the existing repository
-   interface.
-2. Add a unified source router and HTTP/HTTPS engine.
-3. Add Range-based resume, redirects, unknown content length, and optional
-   checksum support.
-4. Add scheduling and bandwidth controls.
-5. Add history filters and capability-driven HTTP controls.
-6. Harden large-file retry/resume behavior and release signing.
+1. Run packaged-app smoke tests on Windows, macOS, and Linux, including automatic
+   JSON-to-SQLite migration.
+2. Add code signing and a reproducible release workflow.
+3. Harden very large direct downloads and sleep/network-change recovery.
+4. Plan the BitTorrent engine spike and library decision record.
 
 See `.opencode/agents/` and `.opencode/skills/` for the project-specific
 architecture, UI, download-engine, torrent, and release guidance.

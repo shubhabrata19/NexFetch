@@ -1,11 +1,14 @@
-import type { DownloadJob } from '@shared/domain/job'
+import type { DownloadJob, EngineInfo } from '@shared/ipc/contracts'
 import { Icon } from './Icon'
-import { JobRow } from './JobList'
 import { isTerminalStatus } from '../lib/jobs'
+import { JobRow } from './JobList'
 
 interface QueuePanelProps {
   jobs: DownloadJob[]
+  engines: EngineInfo[]
   onCancel: (jobId: string) => void
+  onPause: (jobId: string) => void
+  onResume: (jobId: string) => void
   onRetry: (jobId: string) => void
   onRemove: (jobId: string) => void
   onOpenLocation: (jobId: string, revealFile: boolean) => void
@@ -15,13 +18,19 @@ interface QueuePanelProps {
 
 export function QueuePanel({
   jobs,
+  engines,
   onCancel,
+  onPause,
+  onResume,
   onRetry,
   onRemove,
   onOpenLocation,
   onOpenDestination,
   onViewHistory,
 }: QueuePanelProps) {
+  const pausableEngineIds = new Set(
+    engines.filter((engine) => engine.capabilities.pauseResume).map((engine) => engine.id),
+  )
   const activeJobs = jobs
     .filter((job) => !isTerminalStatus(job.status))
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
@@ -53,7 +62,10 @@ export function QueuePanel({
                     key={job.id}
                     job={job}
                     compact
+                    pausableEngineIds={pausableEngineIds}
                     onCancel={onCancel}
+                    onPause={onPause}
+                    onResume={onResume}
                     onRetry={onRetry}
                     onRemove={onRemove}
                     onOpenLocation={onOpenLocation}
@@ -80,7 +92,10 @@ export function QueuePanel({
                     key={job.id}
                     job={job}
                     compact
+                    pausableEngineIds={pausableEngineIds}
                     onCancel={onCancel}
+                    onPause={onPause}
+                    onResume={onResume}
                     onRetry={onRetry}
                     onRemove={onRemove}
                     onOpenLocation={onOpenLocation}

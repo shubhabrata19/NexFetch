@@ -12,6 +12,8 @@ import {
   NoEngineError,
   UnsupportedSourceError,
 } from '@main/engines/registry'
+import { HttpEngine } from '@main/engines/http/http-engine'
+import { YoutubeEngine } from '@main/engines/youtube/youtube-engine'
 
 const source: DownloadSource = {
   kind: 'youtube',
@@ -97,6 +99,28 @@ describe('engine registry', () => {
     const registry = new EngineRegistry()
     registry.register(fakeEngine('one', () => null))
     expect(() => registry.resolve({ kind: 'text', value: 'anything' })).toThrow(NoEngineError)
+  })
+
+  it('routes YouTube before the generic HTTP engine and blocks HTTP fallbacks for playlists', () => {
+    const registry = new EngineRegistry()
+    registry.register(new HttpEngine())
+    registry.register(new YoutubeEngine())
+
+    expect(
+      registry.resolve({
+        kind: 'text',
+        value: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+      }).engine.id,
+    ).toBe('youtube')
+    expect(
+      registry.resolve({ kind: 'text', value: 'https://example.com/files/report.pdf' }).engine.id,
+    ).toBe('http')
+    expect(() =>
+      registry.resolve({
+        kind: 'text',
+        value: 'https://www.youtube.com/playlist?list=PL123',
+      }),
+    ).toThrow(UnsupportedSourceError)
   })
 
   it('rejects duplicate engine IDs', () => {

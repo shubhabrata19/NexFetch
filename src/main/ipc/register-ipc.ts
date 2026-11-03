@@ -6,18 +6,22 @@ import { isAbsolute } from 'node:path'
 import type { ZodType } from 'zod'
 import { DomainError } from '@shared/domain/errors'
 import type { ErrorCode } from '@shared/domain/errors'
-import type { AppInfo, DownloadJob, Result } from '@shared/ipc/contracts'
+import type { AppInfo, DownloadJob, EngineInfo, Result } from '@shared/ipc/contracts'
 import { IPC } from '@shared/ipc/channels'
 import {
   createJobRequestSchema,
   jobIdRequestSchema,
   openLocationRequestSchema,
+  previewCancelSchema,
+  previewRequestSchema,
   youtubeCancelPreviewSchema,
   youtubePreviewRequestSchema,
 } from '@shared/validation/jobs'
 import { settingsPatchSchema } from '@shared/validation/settings'
 import type { DownloadManager } from '../download/download-manager'
+import type { PreviewService } from '../download/preview-service'
 import type { YoutubePreviewService } from '../download/youtube-preview-service'
+import type { EngineRegistry } from '../engines/registry'
 import type { DependencyService } from '../services/dependency-service'
 import type { Logger } from '../services/logger'
 import type { SettingsService } from '../services/settings-service'
@@ -26,7 +30,9 @@ interface IpcDependencies {
   getWindow: () => BrowserWindow | null
   settings: SettingsService
   dependencies: DependencyService
+  previewService: PreviewService
   youtubePreview: YoutubePreviewService
+  registry: EngineRegistry
   downloadManager: DownloadManager
   logger: Logger
 }
@@ -40,12 +46,17 @@ const INVOKE_CHANNELS = [
   IPC.openLogs,
   IPC.dependenciesStatus,
   IPC.dependenciesRecheck,
+  IPC.previewRequest,
+  IPC.previewCancel,
+  IPC.enginesList,
   IPC.youtubePreview,
   IPC.youtubeCancelPreview,
   IPC.jobsCreate,
   IPC.jobsList,
   IPC.jobsCancel,
   IPC.jobsRetry,
+  IPC.jobsPause,
+  IPC.jobsResume,
   IPC.jobsRemove,
   IPC.jobsOpenLocation,
 ] as const
@@ -78,11 +89,14 @@ export function registerIpc(dependencies: IpcDependencies): () => void {
     getWindow,
     settings,
     dependencies: dependencyService,
+    previewService,
     youtubePreview,
+    registry,
     downloadManager,
     logger,
   } = dependencies
   const previewControllers = new Map<string, AbortController>()
+  const sourcePreviewControllers = new Map<string, AbortController>()
 
   const isTrustedSender = (event: IpcMainInvokeEvent): boolean => {
     const window = getWindow()
@@ -227,6 +241,37 @@ export function registerIpc(dependencies: IpcDependencies): () => void {
     },
   )
 
+  handle<void, EngineInfo[]>(IPC.enginesList, null, () =>
+    registry.list().map((engine) => ({
+      id: engine.id,
+      displayName: engine.displayName,
+      capabilities: engine.capabilities,
+    })),
+  )
+
+  handle(IPC.previewRequest, previewRequestSchema, async ({ url, requestId }) => {
+    for (const [existingId, controller] of sourcePreviewControllers) {
+      if (existingId !== requestId) {
+        controller.abort()
+        sourcePreviewControllers.delete(existingId)
+      }
+    }
+
+    const controller = new AbortController()
+    sourcePreviewControllers.set(requestId, controller)
+    try {
+      return await previewService.preview(url, controller.signal)
+    } finally {
+      sourcePreviewControllers.delete(requestId)
+    }
+  })
+
+  handle(IPC.previewCancel, previewCancelSchema, ({ requestId }) => {
+    sourcePreviewControllers.get(requestId)?.abort()
+    sourcePreviewControllers.delete(requestId)
+    return null
+  })
+
   handle(IPC.youtubePreview, youtubePreviewRequestSchema, async ({ url, requestId }) => {
     for (const [existingId, controller] of previewControllers) {
       if (existingId !== requestId) {
@@ -257,6 +302,10 @@ export function registerIpc(dependencies: IpcDependencies): () => void {
   handle(IPC.jobsCancel, jobIdRequestSchema, ({ jobId }) => downloadManager.cancelJob(jobId))
 
   handle(IPC.jobsRetry, jobIdRequestSchema, ({ jobId }) => downloadManager.retryJob(jobId))
+
+  handle(IPC.jobsPause, jobIdRequestSchema, ({ jobId }) => downloadManager.pauseJob(jobId))
+
+  handle(IPC.jobsResume, jobIdRequestSchema, ({ jobId }) => downloadManager.resumeJob(jobId))
 
   handle(IPC.jobsRemove, jobIdRequestSchema, async ({ jobId }) => {
     await downloadManager.removeJob(jobId)
@@ -292,6 +341,8 @@ export function registerIpc(dependencies: IpcDependencies): () => void {
   return () => {
     for (const controller of previewControllers.values()) controller.abort()
     previewControllers.clear()
+    for (const controller of sourcePreviewControllers.values()) controller.abort()
+    sourcePreviewControllers.clear()
     for (const channel of INVOKE_CHANNELS) ipcMain.removeHandler(channel)
   }
 }

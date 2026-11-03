@@ -4,6 +4,7 @@ import type {
   CreateJobRequest,
   DependencyStatus,
   DownloadJob,
+  EngineInfo,
   Settings,
   SettingsPatch,
   Theme,
@@ -46,6 +47,7 @@ export default function App() {
   const [settings, setSettings] = useState<Settings | null>(null)
   const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>(() => resolveTheme('system'))
   const [dependencies, setDependencies] = useState<DependencyStatus | null>(null)
+  const [engines, setEngines] = useState<EngineInfo[]>([])
   const [jobs, setJobs] = useState<DownloadJob[]>([])
   const [loading, setLoading] = useState(true)
   const [fatalError, setFatalError] = useState<string | null>(null)
@@ -76,12 +78,14 @@ export default function App() {
     setLoading(true)
     setFatalError(null)
 
-    const [infoResult, settingsResult, dependencyResult, jobsResult] = await Promise.all([
-      window.nexfetch.app.getInfo(),
-      window.nexfetch.settings.get(),
-      window.nexfetch.dependencies.getStatus(),
-      window.nexfetch.jobs.list(),
-    ])
+    const [infoResult, settingsResult, dependencyResult, engineResult, jobsResult] =
+      await Promise.all([
+        window.nexfetch.app.getInfo(),
+        window.nexfetch.settings.get(),
+        window.nexfetch.dependencies.getStatus(),
+        window.nexfetch.engines.list(),
+        window.nexfetch.jobs.list(),
+      ])
 
     if (!infoResult.ok) {
       setFatalError(infoResult.error.message)
@@ -100,6 +104,9 @@ export default function App() {
       setDependencies(dependencyResult.data)
     } else {
       showToast('error', dependencyResult.error.message)
+    }
+    if (engineResult.ok) {
+      setEngines(engineResult.data)
     }
     if (jobsResult.ok) {
       setJobs(jobsResult.data)
@@ -241,6 +248,35 @@ export default function App() {
     [showToast, upsertJob],
   )
 
+  const pauseJob = useCallback(
+    (jobId: string): void => {
+      void (async () => {
+        const result = await window.nexfetch.jobs.pause({ jobId })
+        if (!result.ok) {
+          showToast('error', result.error.message)
+          return
+        }
+        upsertJob(result.data)
+      })()
+    },
+    [showToast, upsertJob],
+  )
+
+  const resumeJob = useCallback(
+    (jobId: string): void => {
+      void (async () => {
+        const result = await window.nexfetch.jobs.resume({ jobId })
+        if (!result.ok) {
+          showToast('error', result.error.message)
+          return
+        }
+        upsertJob(result.data)
+        showToast('info', 'Download resumed.')
+      })()
+    },
+    [showToast, upsertJob],
+  )
+
   const retryJob = useCallback(
     (jobId: string): void => {
       void (async () => {
@@ -311,9 +347,12 @@ export default function App() {
           <DownloadsPage
             settings={settings}
             dependencies={dependencies}
+            engines={engines}
             jobs={jobs}
             onCreateJob={createJob}
             onCancelJob={cancelJob}
+            onPauseJob={pauseJob}
+            onResumeJob={resumeJob}
             onRetryJob={retryJob}
             onRemoveJob={removeJob}
             onOpenJobLocation={openJobLocation}

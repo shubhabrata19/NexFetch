@@ -1,3 +1,5 @@
+import type { EngineCapabilities } from '../domain/engine'
+import type { HttpPreviewEnvelope, HttpSelection } from '../domain/http'
 import type { DownloadJob } from '../domain/job'
 import type { AppError } from '../domain/errors'
 import type { YoutubePreviewEnvelope, YoutubeSelection } from '../domain/youtube'
@@ -42,13 +44,29 @@ export interface DependencyStatus {
 
 export interface CreateJobRequest {
   previewToken: string
-  selection: YoutubeSelection
+  selection: YoutubeSelection | HttpSelection
   destination: string
+  /** Optional ISO timestamp for a one-time scheduled start. */
+  scheduledAt?: string
 }
 
 export interface YoutubePreviewRequest {
   url: string
   requestId: string
+}
+
+export interface PreviewRequest {
+  url: string
+  requestId: string
+}
+
+export type SourcePreviewEnvelope =
+  (YoutubePreviewEnvelope & { engineId: 'youtube' }) | HttpPreviewEnvelope
+
+export interface EngineInfo {
+  id: string
+  displayName: string
+  capabilities: EngineCapabilities
 }
 
 export interface JobIdRequest {
@@ -60,4 +78,10 @@ export interface OpenLocationRequest {
   revealFile?: boolean
 }
 
-export type { DownloadJob, YoutubePreviewEnvelope, YoutubeSelection }
+export type {
+  DownloadJob,
+  HttpPreviewEnvelope,
+  HttpSelection,
+  YoutubePreviewEnvelope,
+  YoutubeSelection,
+}

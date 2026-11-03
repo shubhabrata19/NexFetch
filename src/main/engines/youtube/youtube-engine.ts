@@ -117,7 +117,7 @@ interface StreamProgress {
  */
 function seedStreamProgress(details: EngineSelection['details']): Map<string, StreamProgress> {
   const streams = new Map<string, StreamProgress>()
-  if (!details) return streams
+  if (!details || details.engineId !== 'youtube') return streams
 
   for (const summary of [details.selectedVideo, details.selectedAudio]) {
     if (!summary) continue

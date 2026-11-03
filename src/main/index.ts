@@ -4,9 +4,10 @@ import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { IPC } from '@shared/ipc/channels'
 import { DownloadManager } from './download/download-manager'
-import { JsonJobRepository } from './download/job-repository'
 import { PreviewCache } from './download/preview-cache'
+import { PreviewService } from './download/preview-service'
 import { YoutubePreviewService } from './download/youtube-preview-service'
+import { HttpEngine } from './engines/http/http-engine'
 import { EngineRegistry } from './engines/registry'
 import { YoutubeEngine } from './engines/youtube/youtube-engine'
 import { registerIpc } from './ipc/register-ipc'
@@ -17,6 +18,11 @@ import { FileService } from './services/file-service'
 import { Logger } from './services/logger'
 import { MediaVerifier } from './services/media-verifier'
 import { SettingsService } from './services/settings-service'
+import { migrateJsonJobs } from './storage/json-migration'
+import { migrateDatabase } from './storage/migrations'
+import { SqliteJobRepository } from './storage/sqlite-job-repository'
+import { SqliteDatabase } from './storage/sqlite-database'
+import { SqliteSettingsRepository } from './storage/settings-repository'
 import { createMainWindow } from './window'
 
 const isDev = !app.isPackaged
@@ -27,6 +33,7 @@ app.enableSandbox()
 let mainWindow: BrowserWindow | null = null
 let logger: Logger | null = null
 let downloadManager: DownloadManager | null = null
+let database: SqliteDatabase | null = null
 let disposeIpc: (() => void) | null = null
 let shuttingDown = false
 
@@ -81,6 +88,8 @@ if (!gotSingleInstanceLock) {
     disposeIpc?.()
     disposeIpc = null
     downloadManager = null
+    database?.close()
+    database = null
   })
 
   app.on('window-all-closed', () => {
@@ -112,9 +121,29 @@ if (!gotSingleInstanceLock) {
       configureSession(session.defaultSession, isDev)
       createAppMenu(isDev)
 
+      const userData = app.getPath('userData')
+      const defaultDownloadDirectory = join(app.getPath('downloads'), 'NexFetch')
+      const sqlite = new SqliteDatabase({
+        filePath: join(userData, 'nexfetch.sqlite'),
+        logger: appLogger,
+      })
+      sqlite.open()
+      database = sqlite
+      migrateDatabase(sqlite, appLogger)
+
+      const jobs = new SqliteJobRepository(sqlite, appLogger)
+      migrateJsonJobs({
+        database: sqlite,
+        repository: jobs,
+        jobsFilePath: join(userData, 'jobs.json'),
+        logger: appLogger,
+      })
+
       const settings = new SettingsService({
-        filePath: join(app.getPath('userData'), 'settings.json'),
-        defaultDownloadDirectory: join(app.getPath('downloads'), 'NexFetch'),
+        repository: new SqliteSettingsRepository(sqlite),
+        defaultDownloadDirectory,
+        legacyFilePath: join(userData, 'settings.json'),
+        logger: appLogger,
       })
 
       nativeTheme.themeSource = settings.get().theme
@@ -135,13 +164,19 @@ if (!gotSingleInstanceLock) {
       const registry = new EngineRegistry()
       const youtubeEngine = new YoutubeEngine()
       registry.register(youtubeEngine)
+      registry.register(new HttpEngine())
 
-      const jobs = new JsonJobRepository(join(app.getPath('userData'), 'jobs.json'))
       const previewCache = new PreviewCache()
       const fileService = new FileService()
       const mediaVerifier = new MediaVerifier(dependencyService)
       const youtubePreview = new YoutubePreviewService(
         youtubeEngine,
+        previewCache,
+        dependencyService,
+        appLogger,
+      )
+      const previewService = new PreviewService(
+        registry,
         previewCache,
         dependencyService,
         appLogger,
@@ -169,18 +204,23 @@ if (!gotSingleInstanceLock) {
         getWindow: getMainWindow,
         settings,
         dependencies: dependencyService,
+        previewService,
         youtubePreview,
+        registry,
         downloadManager,
         logger: appLogger,
       })
 
       mainWindow = createMainWindow(isDev, appLogger)
+      downloadManager?.refreshQueue()
       appLogger.info('app_ready')
     })
     .catch((error: unknown) => {
       logger?.error('app_startup_failed', {
         error: error instanceof Error ? error.message : String(error),
       })
+      database?.close()
+      database = null
       app.quit()
     })
 }

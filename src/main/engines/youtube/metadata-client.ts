@@ -106,6 +106,10 @@ export class MetadataClient {
   constructor(private readonly runner: Runner = runProcess) {}
 
   async fetch(source: DownloadSource, ctx: EngineContext): Promise<RawYoutubeMetadata> {
+    if (source.kind !== 'youtube') {
+      throw new DomainError('INVALID_REQUEST', 'The source is not a YouTube video.')
+    }
+
     const ytDlp = ctx.dependencies.resolve('yt-dlp')
     if (!ytDlp) {
       throw new DomainError(

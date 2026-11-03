@@ -10,10 +10,19 @@ interface JobListProps {
   emptyTitle: string
   emptyMessage: string
   emptyIcon: 'download' | 'history'
+  pausableEngineIds?: ReadonlySet<string>
   onCancel: (jobId: string) => void
+  onPause?: (jobId: string) => void
+  onResume?: (jobId: string) => void
   onRetry: (jobId: string) => void
   onRemove: (jobId: string) => void
   onOpenLocation: (jobId: string, revealFile: boolean) => void
+}
+
+function scheduledLabel(job: DownloadJob): string | null {
+  if (!job.scheduledAt) return null
+  const date = new Date(job.scheduledAt)
+  return Number.isFinite(date.getTime()) ? date.toLocaleString() : null
 }
 
 const STATUS_LABELS: Record<JobStatus, string> = {
@@ -43,6 +52,21 @@ function isProgressStatus(status: JobStatus): boolean {
 }
 
 function jobDetailLine(job: DownloadJob): string | null {
+  if (job.details?.engineId === 'http') {
+    const parts = [
+      job.details.contentType,
+      job.details.resumable ? 'Resumable' : null,
+      job.details.checksum
+        ? job.details.checksum.verified === true
+          ? 'SHA-256 verified'
+          : job.details.checksum.verified === false
+            ? 'Checksum failed'
+            : 'SHA-256'
+        : null,
+    ].filter((value): value is string => Boolean(value))
+    return parts.length > 0 ? parts.join(' · ') : null
+  }
+
   if (job.details?.engineId !== 'youtube') return null
   const parts = [
     job.details.selectedVideo?.label,
@@ -89,7 +113,10 @@ function JobActions({
   job,
   compact,
   confirmingClear,
+  canPauseResume,
   onCancel,
+  onPause,
+  onResume,
   onRetry,
   onOpenLocation,
   onClear,
@@ -99,7 +126,10 @@ function JobActions({
   job: DownloadJob
   compact: boolean
   confirmingClear: boolean
+  canPauseResume: boolean
   onCancel: (jobId: string) => void
+  onPause?: (jobId: string) => void
+  onResume?: (jobId: string) => void
   onRetry: (jobId: string) => void
   onOpenLocation: (jobId: string, revealFile: boolean) => void
   onClear: () => void
@@ -107,6 +137,13 @@ function JobActions({
   onCancelClear: () => void
 }) {
   const terminal = isTerminalStatus(job.status)
+  const canPause =
+    canPauseResume &&
+    !terminal &&
+    job.status !== 'paused' &&
+    job.status !== 'cancelling' &&
+    onPause !== undefined
+  const canResume = canPauseResume && job.status === 'paused' && onResume !== undefined
 
   if (confirmingClear) {
     return (
@@ -124,6 +161,14 @@ function JobActions({
 
   return (
     <div className="job-actions">
+      {canResume ? (
+        <IconButton icon="play" label={`Resume ${job.title}`} onClick={() => onResume?.(job.id)} />
+      ) : null}
+
+      {canPause ? (
+        <IconButton icon="pause" label={`Pause ${job.title}`} onClick={() => onPause?.(job.id)} />
+      ) : null}
+
       {!terminal ? (
         <IconButton
           icon="stop"
@@ -188,10 +233,13 @@ function CompactJobDetails({ job }: { job: DownloadJob }) {
   }
 
   if (job.status === 'queued') {
+    const scheduled = scheduledLabel(job)
     return (
       <div className="job-meta job-meta--compact">
         {state}
-        <span className="job-size">Waiting for a slot</span>
+        <span className="job-size">
+          {scheduled ? `Scheduled ${scheduled}` : 'Waiting for a slot'}
+        </span>
       </div>
     )
   }
@@ -258,14 +306,20 @@ function CompactJobDetails({ job }: { job: DownloadJob }) {
 export function JobRow({
   job,
   compact = false,
+  pausableEngineIds,
   onCancel,
+  onPause,
+  onResume,
   onRetry,
   onRemove,
   onOpenLocation,
 }: {
   job: DownloadJob
   compact?: boolean
+  pausableEngineIds?: ReadonlySet<string>
   onCancel: (jobId: string) => void
+  onPause?: (jobId: string) => void
+  onResume?: (jobId: string) => void
   onRetry: (jobId: string) => void
   onRemove: (jobId: string) => void
   onOpenLocation: (jobId: string, revealFile: boolean) => void
@@ -275,6 +329,8 @@ export function JobRow({
   const showProgress = isProgressStatus(job.status)
   const size = jobSize(job)
   const terminal = isTerminalStatus(job.status)
+  const canPauseResume = pausableEngineIds?.has(job.engineId) ?? false
+  const scheduled = scheduledLabel(job)
   const [completionFlash, setCompletionFlash] = useState(false)
   const [confirmingClear, setConfirmingClear] = useState(false)
   const [removing, setRemoving] = useState(false)
@@ -341,7 +397,13 @@ export function JobRow({
               <span className={`badge job-status ${statusTone(job.status)}`}>
                 {STATUS_LABELS[job.status]}
               </span>
-              <span className="job-engine">YouTube</span>
+              <span className="job-engine">
+                {job.engineId === 'http'
+                  ? 'Direct file'
+                  : job.engineId === 'youtube'
+                    ? 'YouTube'
+                    : job.engineId}
+              </span>
               {detail ? <span className="job-detail">{detail}</span> : null}
             </div>
           ) : null}
@@ -375,7 +437,7 @@ export function JobRow({
                     <span>{size}</span>
                   ) : null
                 ) : job.status === 'queued' ? (
-                  <span>Waiting for a slot</span>
+                  <span>{scheduled ? `Scheduled ${scheduled}` : 'Waiting for a slot'}</span>
                 ) : job.status === 'resolving' ? (
                   <span>Reading video info</span>
                 ) : job.status === 'cancelling' ? (
@@ -442,7 +504,10 @@ export function JobRow({
         job={job}
         compact={compact}
         confirmingClear={confirmingClear}
+        canPauseResume={canPauseResume}
         onCancel={onCancel}
+        onPause={onPause}
+        onResume={onResume}
         onRetry={onRetry}
         onOpenLocation={onOpenLocation}
         onClear={beginClear}
@@ -458,7 +523,10 @@ export function JobList({
   emptyTitle,
   emptyMessage,
   emptyIcon,
+  pausableEngineIds,
   onCancel,
+  onPause,
+  onResume,
   onRetry,
   onRemove,
   onOpenLocation,
@@ -488,7 +556,10 @@ export function JobList({
         <JobRow
           key={job.id}
           job={job}
+          pausableEngineIds={pausableEngineIds}
           onCancel={onCancel}
+          onPause={onPause}
+          onResume={onResume}
           onRetry={onRetry}
           onRemove={onRemove}
           onOpenLocation={onOpenLocation}

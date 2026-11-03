@@ -19,6 +19,22 @@ interface JobRuntime {
   controller: AbortController
   completion: Promise<void>
   lastPersistAt: number
+  pauseRequested: boolean
+}
+
+function isActiveStatus(status: JobStatus): boolean {
+  return (
+    status === 'resolving' ||
+    status === 'downloading' ||
+    status === 'processing' ||
+    status === 'verifying'
+  )
+}
+
+function scheduledTime(job: PersistedJobRecord): number | null {
+  if (!job.scheduledAt) return null
+  const parsed = Date.parse(job.scheduledAt)
+  return Number.isFinite(parsed) ? parsed : null
 }
 
 export interface DownloadManagerOptions {
@@ -46,6 +62,15 @@ function positive(value: number | null | undefined): number | null {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null
 }
 
+function interruptedError(): AppError {
+  return {
+    code: 'INTERRUPTED',
+    message: 'NexFetch closed before this download finished. Retry to start again.',
+    retryable: true,
+    diagnosticId: randomUUID(),
+  }
+}
+
 function toAppError(error: unknown): AppError {
   if (error instanceof DomainError) {
     return {
@@ -66,6 +91,7 @@ function toAppError(error: unknown): AppError {
 
 export class DownloadManager {
   private readonly runtimes = new Map<string, JobRuntime>()
+  private scheduleTimer: NodeJS.Timeout | null = null
   private shuttingDown = false
 
   constructor(private readonly options: DownloadManagerOptions) {}
@@ -110,6 +136,11 @@ export class DownloadManager {
       }
     }
 
+    const scheduled = request.scheduledAt ? Date.parse(request.scheduledAt) : Number.NaN
+    const scheduledAt =
+      Number.isFinite(scheduled) && scheduled > Date.now()
+        ? new Date(scheduled).toISOString()
+        : null
     const now = new Date().toISOString()
     const job: PersistedJobRecord = {
       id: randomUUID(),
@@ -128,6 +159,7 @@ export class DownloadManager {
       updatedAt: now,
       startedAt: null,
       completedAt: null,
+      scheduledAt,
       selection,
       workspaceDirectory: null,
     }
@@ -152,6 +184,12 @@ export class DownloadManager {
       return toJobView(job)
     }
 
+    if (job.status === 'paused') {
+      await this.cleanupWorkspace(job, job.workspaceDirectory)
+      this.setTerminal(job, 'cancelled', null)
+      return toJobView(job)
+    }
+
     const runtime = this.runtimes.get(jobId)
     if (!runtime) {
       this.setTerminal(job, 'cancelled', null)
@@ -164,9 +202,72 @@ export class DownloadManager {
       this.options.jobs.save(job)
       this.emit(job)
     }
-    runtime.controller.abort()
+    runtime.controller.abort('cancel')
     await runtime.completion
     return this.getJob(jobId) ?? toJobView(job)
+  }
+
+  async pauseJob(jobId: string): Promise<DownloadJob> {
+    const job = this.getOrThrow(jobId)
+    if (job.status === 'paused') return toJobView(job)
+    if (job.status === 'queued') {
+      const engine = this.options.registry.get(job.engineId)
+      if (!engine.capabilities.pauseResume) {
+        throw new DomainError('INVALID_REQUEST', 'This download cannot be paused.')
+      }
+      job.status = 'paused'
+      job.progress = { ...job.progress, bytesPerSecond: null, etaSeconds: null }
+      this.touch(job)
+      this.options.jobs.save(job)
+      this.emit(job)
+      this.pump()
+      return toJobView(job)
+    }
+    if (!isActiveStatus(job.status)) {
+      throw new DomainError('INVALID_REQUEST', 'Only an active download can be paused.')
+    }
+
+    const engine = this.options.registry.get(job.engineId)
+    if (!engine.capabilities.pauseResume) {
+      throw new DomainError('INVALID_REQUEST', 'This download cannot be paused.')
+    }
+
+    const runtime = this.runtimes.get(jobId)
+    if (!runtime) {
+      job.status = 'paused'
+      job.progress = { ...job.progress, bytesPerSecond: null, etaSeconds: null }
+      this.touch(job)
+      this.options.jobs.save(job)
+      this.emit(job)
+      this.pump()
+      return toJobView(job)
+    }
+
+    runtime.pauseRequested = true
+    runtime.controller.abort('pause')
+    await runtime.completion
+    return this.getJob(jobId) ?? toJobView(job)
+  }
+
+  async resumeJob(jobId: string): Promise<DownloadJob> {
+    const job = this.getOrThrow(jobId)
+    if (job.status !== 'paused') {
+      throw new DomainError('INVALID_REQUEST', 'Only a paused download can be resumed.')
+    }
+
+    const engine = this.options.registry.get(job.engineId)
+    if (!engine.capabilities.pauseResume) {
+      throw new DomainError('INVALID_REQUEST', 'This download cannot be resumed.')
+    }
+
+    job.status = 'queued'
+    job.error = null
+    job.scheduledAt = null
+    this.touch(job)
+    this.options.jobs.save(job)
+    this.emit(job)
+    this.pump()
+    return toJobView(job)
   }
 
   async retryJob(jobId: string): Promise<DownloadJob> {
@@ -184,6 +285,7 @@ export class DownloadManager {
     job.output = null
     job.startedAt = null
     job.completedAt = null
+    job.scheduledAt = null
     job.attempt += 1
     job.workspaceDirectory = null
     this.touch(job)
@@ -218,6 +320,33 @@ export class DownloadManager {
     const now = new Date().toISOString()
     for (const job of this.options.jobs.list()) {
       if (isTerminal(job.status)) continue
+      if (job.status === 'queued' || job.status === 'paused') continue
+
+      if (job.status === 'cancelling') {
+        job.status = 'cancelled'
+        job.completedAt = now
+        job.progress = { ...job.progress, bytesPerSecond: null, etaSeconds: null }
+        this.touch(job)
+        const workspace = job.workspaceDirectory
+        job.workspaceDirectory = null
+        this.options.jobs.save(job)
+        if (workspace) {
+          void this.options.files.removeWorkspace(workspace, job.destination).catch(() => undefined)
+        }
+        continue
+      }
+
+      if (this.canResumeAfterRestart(job) && job.workspaceDirectory !== null) {
+        job.status = 'queued'
+        job.startedAt = null
+        job.completedAt = null
+        job.error = null
+        job.progress = { ...job.progress, bytesPerSecond: null, etaSeconds: null }
+        this.touch(job)
+        this.options.jobs.save(job)
+        continue
+      }
+
       job.status = 'failed'
       job.completedAt = now
       job.error = {
@@ -226,6 +355,7 @@ export class DownloadManager {
         retryable: true,
         diagnosticId: randomUUID(),
       }
+      job.progress = { ...job.progress, bytesPerSecond: null, etaSeconds: null }
       this.touch(job)
       const workspace = job.workspaceDirectory
       job.workspaceDirectory = null
@@ -238,8 +368,12 @@ export class DownloadManager {
 
   async shutdown(): Promise<void> {
     this.shuttingDown = true
+    if (this.scheduleTimer) {
+      clearTimeout(this.scheduleTimer)
+      this.scheduleTimer = null
+    }
     const completions = [...this.runtimes.values()].map((runtime) => {
-      runtime.controller.abort()
+      runtime.controller.abort('shutdown')
       return runtime.completion
     })
 
@@ -247,6 +381,14 @@ export class DownloadManager {
       Promise.allSettled(completions),
       new Promise<void>((resolve) => setTimeout(resolve, 5000)),
     ])
+  }
+
+  private canResumeAfterRestart(job: PersistedJobRecord): boolean {
+    try {
+      return this.options.registry.get(job.engineId).capabilities.resumeAfterRestart
+    } catch {
+      return false
+    }
   }
 
   private getOrThrow(jobId: string): PersistedJobRecord {
@@ -259,16 +401,42 @@ export class DownloadManager {
 
   private pump(): void {
     if (this.shuttingDown) return
-    const maxConcurrent = this.options.settings.get().maxConcurrentDownloads
-
-    while (this.runtimes.size < maxConcurrent) {
-      const next = this.options.jobs
-        .list()
-        .filter((job) => job.status === 'queued')
-        .sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0]
-      if (!next) return
-      this.startJob(next)
+    if (this.scheduleTimer) {
+      clearTimeout(this.scheduleTimer)
+      this.scheduleTimer = null
     }
+
+    const maxConcurrent = this.options.settings.get().maxConcurrentDownloads
+    const now = Date.now()
+    const queued = this.options.jobs
+      .list()
+      .filter((job) => job.status === 'queued')
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+
+    for (const job of queued) {
+      if (this.runtimes.size >= maxConcurrent) return
+      const dueAt = scheduledTime(job)
+      if (dueAt !== null && dueAt > now) continue
+      this.startJob(job)
+    }
+
+    if (this.runtimes.size >= maxConcurrent) return
+
+    const nextScheduled = queued
+      .map((job) => ({ job, dueAt: scheduledTime(job) }))
+      .filter(
+        (entry): entry is { job: PersistedJobRecord; dueAt: number } =>
+          entry.dueAt !== null && entry.dueAt > now,
+      )
+      .sort((a, b) => a.dueAt - b.dueAt)[0]
+
+    if (!nextScheduled) return
+    const delay = Math.min(nextScheduled.dueAt - now, 2 ** 31 - 1)
+    this.scheduleTimer = setTimeout(() => {
+      this.scheduleTimer = null
+      this.pump()
+    }, delay)
+    this.scheduleTimer.unref()
   }
 
   private startJob(job: PersistedJobRecord): void {
@@ -277,6 +445,7 @@ export class DownloadManager {
       controller,
       completion: Promise.resolve(),
       lastPersistAt: 0,
+      pauseRequested: false,
     }
     this.runtimes.set(job.id, runtime)
 
@@ -367,11 +536,40 @@ export class DownloadManager {
       this.emit(job)
       this.options.logger.info('job_completed', { jobId: job.id })
     } catch (error) {
-      const cancelled =
+      const aborted =
         runtime.controller.signal.aborted ||
         (error instanceof DomainError && error.code === 'CANCELLED')
 
-      if (cancelled) {
+      if (aborted) {
+        if (this.shuttingDown) {
+          if (this.canResumeAfterRestart(job) && job.workspaceDirectory !== null) {
+            job.status = 'queued'
+            job.startedAt = null
+            job.completedAt = null
+            job.error = null
+            job.progress = { ...job.progress, bytesPerSecond: null, etaSeconds: null }
+            this.touch(job)
+            this.options.jobs.save(job)
+            this.emit(job)
+            return
+          }
+
+          await this.cleanupWorkspace(job, job.workspaceDirectory)
+          this.setTerminal(job, 'failed', interruptedError())
+          return
+        }
+
+        if (runtime.pauseRequested) {
+          job.status = 'paused'
+          job.completedAt = null
+          job.error = null
+          job.progress = { ...job.progress, bytesPerSecond: null, etaSeconds: null }
+          this.touch(job)
+          this.options.jobs.save(job)
+          this.emit(job)
+          return
+        }
+
         await this.cleanupWorkspace(job, job.workspaceDirectory)
         this.setTerminal(job, 'cancelled', null)
         return

@@ -6,6 +6,8 @@ export type IconName =
   | 'file'
   | 'refresh'
   | 'stop'
+  | 'pause'
+  | 'play'
   | 'x'
   | 'sun'
   | 'moon'
@@ -87,6 +89,19 @@ export function Icon({ name, size = 18, className }: IconProps) {
       return (
         <svg {...common}>
           <rect x="6" y="6" width="12" height="12" rx="2" />
+        </svg>
+      )
+    case 'pause':
+      return (
+        <svg {...common}>
+          <path d="M9 6v12" />
+          <path d="M15 6v12" />
+        </svg>
+      )
+    case 'play':
+      return (
+        <svg {...common}>
+          <path d="m8 5 11 7-11 7z" />
         </svg>
       )
     case 'x':

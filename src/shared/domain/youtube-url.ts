@@ -1,4 +1,4 @@
-import type { DownloadSource } from './job'
+import type { YoutubeDownloadSource } from './job'
 
 const YOUTUBE_HOSTS = new Set([
   'youtube.com',
@@ -15,7 +15,7 @@ const VIDEO_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/
 const HOST_LIKE_PATTERN = /^(?:www\.|m\.|music\.)?(?:youtube\.com|youtu\.be|youtube-nocookie\.com)/i
 
 export type YoutubeInputClassification =
-  { kind: 'supported'; source: DownloadSource } | { kind: 'unsupported'; reason: string }
+  { kind: 'supported'; source: YoutubeDownloadSource } | { kind: 'unsupported'; reason: string }
 
 function normalizeInput(value: string): string {
   const trimmed = value.trim()
@@ -87,7 +87,7 @@ export function classifyYoutubeInput(value: string): YoutubeInputClassification 
   }
 }
 
-export function parseYoutubeUrl(value: string): DownloadSource | null {
+export function parseYoutubeUrl(value: string): YoutubeDownloadSource | null {
   const classification = classifyYoutubeInput(value)
   return classification?.kind === 'supported' ? classification.source : null
 }

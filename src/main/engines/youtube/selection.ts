@@ -78,6 +78,10 @@ function containerFor(video: YoutubeFormat, audio: YoutubeFormat | null): string
   return compatible ? 'mp4' : 'mkv'
 }
 
+export interface YoutubeEngineSelection extends EngineSelection {
+  details: YoutubeJobDetails | null
+}
+
 function buildSelection(
   preview: YoutubePreview,
   mode: 'video' | 'audio',
@@ -85,7 +89,7 @@ function buildSelection(
   audio: YoutubeFormat | null,
   requiresFfmpeg: boolean,
   container: string,
-): EngineSelection {
+): YoutubeEngineSelection {
   const formatIds = [video?.formatId, audio?.formatId].filter(
     (value): value is string => typeof value === 'string',
   )
@@ -134,7 +138,7 @@ function buildSelection(
 export function resolveYoutubeSelection(
   preview: YoutubePreview,
   selection: YoutubeSelection,
-): EngineSelection {
+): YoutubeEngineSelection {
   if (selection.mode === 'best-up-to-4k') {
     const choice = selectBestUpTo4k(preview.formats)
     if (!choice?.video) {

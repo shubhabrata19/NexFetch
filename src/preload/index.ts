@@ -35,6 +35,13 @@ const api: NexFetchApi = {
     recheck: () => invoke(IPC.dependenciesRecheck),
     onChanged: (listener) => subscribe(IPC.dependenciesChanged, listener),
   },
+  preview: {
+    request: (url, requestId) => invoke(IPC.previewRequest, { url, requestId }),
+    cancel: (requestId) => invoke(IPC.previewCancel, { requestId }),
+  },
+  engines: {
+    list: () => invoke(IPC.enginesList),
+  },
   youtube: {
     preview: (url, requestId) => invoke(IPC.youtubePreview, { url, requestId }),
     cancelPreview: (requestId) => invoke(IPC.youtubeCancelPreview, { requestId }),
@@ -44,6 +51,8 @@ const api: NexFetchApi = {
     list: () => invoke(IPC.jobsList),
     cancel: (request) => invoke(IPC.jobsCancel, request),
     retry: (request) => invoke(IPC.jobsRetry, request),
+    pause: (request) => invoke(IPC.jobsPause, request),
+    resume: (request) => invoke(IPC.jobsResume, request),
     remove: (request) => invoke(IPC.jobsRemove, request),
     openLocation: (request) => invoke(IPC.jobsOpenLocation, request),
     onChanged: (listener) => subscribe(IPC.jobsChanged, listener),

@@ -3,11 +3,20 @@ import type { AppError } from './errors'
 export type EngineId = string
 export type JobId = string
 
-export type DownloadSource = {
+export type YoutubeDownloadSource = {
   kind: 'youtube'
   videoId: string
   canonicalUrl: string
 }
+
+export type HttpDownloadSource = {
+  kind: 'http'
+  /** Full URL, including query parameters. Never write this to logs. */
+  url: string
+  host: string
+}
+
+export type DownloadSource = YoutubeDownloadSource | HttpDownloadSource
 
 export type JobStatus =
   | 'queued'
@@ -47,7 +56,27 @@ export interface YoutubeJobDetails {
   container: string | null
 }
 
-export type EngineDetails = YoutubeJobDetails
+export interface HttpChecksumState {
+  algorithm: 'sha256'
+  expectedHex: string
+  verified: boolean | null
+}
+
+export interface HttpJobDetails {
+  engineId: 'http'
+  host: string
+  /** Host and path only; query parameters are intentionally omitted. */
+  displayUrl: string
+  contentType: string | null
+  contentLength: number | null
+  acceptRanges: boolean
+  resumable: boolean
+  etag: string | null
+  lastModified: string | null
+  checksum: HttpChecksumState | null
+}
+
+export type EngineDetails = YoutubeJobDetails | HttpJobDetails
 
 export interface JobOutput {
   directory: string
@@ -71,6 +100,7 @@ export interface DownloadJob {
   updatedAt: string
   startedAt: string | null
   completedAt: string | null
+  scheduledAt: string | null
 }
 
 export function emptyProgress(): JobProgress {
@@ -81,4 +111,8 @@ export function emptyProgress(): JobProgress {
     bytesPerSecond: null,
     etaSeconds: null,
   }
+}
+
+export function isTerminalStatus(status: JobStatus): boolean {
+  return status === 'completed' || status === 'failed' || status === 'cancelled'
 }
