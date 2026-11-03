@@ -139,9 +139,7 @@ function JobActions({
   const terminal = isTerminalStatus(job.status)
   const canPause =
     canPauseResume &&
-    !terminal &&
-    job.status !== 'paused' &&
-    job.status !== 'cancelling' &&
+    (job.status === 'queued' || job.status === 'resolving' || job.status === 'downloading') &&
     onPause !== undefined
   const canResume = canPauseResume && job.status === 'paused' && onResume !== undefined
 

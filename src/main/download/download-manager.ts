@@ -22,13 +22,8 @@ interface JobRuntime {
   pauseRequested: boolean
 }
 
-function isActiveStatus(status: JobStatus): boolean {
-  return (
-    status === 'resolving' ||
-    status === 'downloading' ||
-    status === 'processing' ||
-    status === 'verifying'
-  )
+function isPausableStatus(status: JobStatus): boolean {
+  return status === 'queued' || status === 'resolving' || status === 'downloading'
 }
 
 function scheduledTime(job: PersistedJobRecord): number | null {
@@ -223,8 +218,11 @@ export class DownloadManager {
       this.pump()
       return toJobView(job)
     }
-    if (!isActiveStatus(job.status)) {
-      throw new DomainError('INVALID_REQUEST', 'Only an active download can be paused.')
+    if (!isPausableStatus(job.status)) {
+      throw new DomainError(
+        'INVALID_REQUEST',
+        'This download cannot be paused while it is being processed or verified.',
+      )
     }
 
     const engine = this.options.registry.get(job.engineId)
