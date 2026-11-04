@@ -1,6 +1,7 @@
 # Bundled runtime dependencies
 
-NexFetch uses `yt-dlp`, `ffmpeg`, and `ffprobe` for the YouTube MVP.
+NexFetch uses `yt-dlp`, `ffmpeg`, and `ffprobe` for media downloads, plus the
+bundled `nexfetch-torrent-helper` for BitTorrent and info-hash metadata lookups.
 
 ## Layout
 
@@ -14,6 +15,7 @@ resources/
       yt-dlp.exe
       ffmpeg.exe
       ffprobe.exe
+      nexfetch-torrent-helper.exe
     darwin-arm64/
       yt-dlp
       ffmpeg
@@ -55,7 +57,12 @@ This downloads a development copy of yt-dlp and an LGPL FFmpeg build. It is a
 convenience script, not a release supply-chain process.
 
 During development, tools can also be found on `PATH` or via
-`NXF_YTDLP_PATH`, `NXF_FFMPEG_PATH`, and `NXF_FFPROBE_PATH`.
+`NXF_YTDLP_PATH`, `NXF_FFMPEG_PATH`, and `NXF_FFPROBE_PATH`. Build the Windows
+torrent helper with:
+
+```bash
+npm run build:torrent-helper
+```
 
 ## Packaging
 

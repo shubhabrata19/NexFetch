@@ -13,8 +13,9 @@ working engines:
 - Direct HTTP/HTTPS downloads with redirects, Range resume, pause/resume,
   optional SHA-256 verification, and unknown-length support.
 - BitTorrent through a bundled libtorrent 2.x helper: `.torrent` files and v1/v2
-  info hashes, DHT/PEX/LSD, tracker tiers, file selection, pause/resume,
-  per-torrent speed limits, seeding controls, and peer/tracker detail.
+  info hashes, metadata-only DHT lookups, DHT/PEX/LSD, tracker tiers, file
+  selection, pause/resume, per-torrent speed limits, seeding controls, and
+  peer/tracker detail.
 - SQLite-backed job and settings persistence with automatic JSON migration.
 - Real download queue with scheduling, progress, cancellation, retry,
   completion, and history filters.
@@ -51,7 +52,8 @@ Magnet links are intentionally not accepted. BitTorrent input is a local
   rejection.
 - Range-based resume with ETag/Last-Modified validation, safe restart when a
   server ignores Range, unknown content length, and a resume sidecar.
-- User-facing pause/resume for direct downloads; YouTube remains cancel/retry.
+- User-facing pause/resume for direct downloads and torrents; YouTube remains
+  cancel/retry.
 - Optional per-job SHA-256 checksum verification.
 - One-time scheduling with automatic startup of due and missed jobs.
 - SQLite-backed jobs, attempts, and settings using Electron's built-in
@@ -59,7 +61,8 @@ Magnet links are intentionally not accepted. BitTorrent input is a local
 - Historical direct-file and YouTube jobs can be filtered in History.
 - Persistent right-side activity queue with compact progress cards for active,
   queued, and recent downloads.
-- Sidebar active-download module with per-job stop controls and queue navigation.
+- Sidebar active-download module with per-job pause/resume, stop controls,
+  metadata lookup status, and queue navigation.
 - Inline clear confirmation with icon actions and animated card removal. Clearing
   history never deletes downloaded output files.
 - Red, black, and burgundy brand system with system, light, and dark appearance
@@ -156,14 +159,14 @@ npm run icons        # regenerate platform icons
 The current Windows review build is produced with:
 
 ```bash
-npx electron-builder --win nsis -c.directories.output=release/v0.5.0
+npx electron-builder --win nsis -c.directories.output=release/v0.5.0-lookup
 ```
 
 Outputs:
 
 ```text
-release/v0.5.0/NexFetch Setup 0.5.0.exe
-release/v0.5.0/win-unpacked/NexFetch.exe
+release/v0.5.0-lookup/NexFetch Setup 0.5.0.exe
+release/v0.5.0-lookup/win-unpacked/NexFetch.exe
 ```
 
 The installer is currently unsigned, so Windows SmartScreen may warn. The
@@ -175,8 +178,14 @@ brand asset from `resources/assets`.
 - The downloads workspace has YouTube, Direct file, and Torrent tabs. All keep
   the input, preview, pinned action, and activity queue visible together.
 - Torrent intake accepts a dropped or chosen `.torrent` file, or a v1/v2 info
-  hash. Info-hash lookups create a visible Torrents entry immediately, continue
-  across screen changes, and become Setup only after metadata is found.
+  hash. The hash form is a single row above a compact file drop band, with live
+  format validation and an inline lookup status.
+- Info-hash lookups are first-class jobs. They appear under Preparing
+  immediately, keep running across screen changes, report peers/DHT nodes and
+  elapsed time, and can be cancelled or retried. Up to three run at once.
+  Completed lookups move into Setup without stealing focus, and interrupted
+  lookups resume next launch. The helper runs in metadata-only mode, so no
+  payload files are allocated or downloaded.
 - The Torrents page is a master–detail client with Preparing, Setup,
   Downloading, Seeding, and Completed groups; files, peers, trackers, and
   discovery tabs; seeds/peers connected-versus-available counts; live
@@ -189,12 +198,13 @@ brand asset from `resources/assets`.
 - The activity rail shows compact cards with a two-line title, status, percent,
   speed, downloaded/total size, ETA, and progress bar. Actions use icon buttons
   for pause/resume where supported, stop, restart, open folder, and clear.
-- Direct downloads expose pause and resume. YouTube jobs expose cancel and retry.
+- Direct downloads and torrents expose pause and resume. YouTube jobs expose
+  cancel and retry. Metadata lookups expose cancel and retry.
 - History filters records by All, Files, Videos, or Torrents without deleting
   output files.
 - The sidebar shows up to two active downloads with thumbnails, progress, speed,
-  and stop controls. When idle it collapses to a single “No active downloads”
-  line.
+  and pause/resume or stop controls. Metadata lookups appear as “Fetching
+  metadata”. When idle it collapses to a single “No active downloads” line.
 - Clearing a completed job shows an inline warning inside the card, then uses
   check/cancel icon actions. Confirming fades the card out before removing the
   history entry. Downloaded files remain on disk.

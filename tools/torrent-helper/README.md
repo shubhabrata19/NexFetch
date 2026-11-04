@@ -51,6 +51,26 @@ Asynchronous events are separate lines:
 { "event": "torrent.update", "data": { "infoHash": "...", "state": "downloading" } }
 ```
 
+## Metadata resolution
+
+`torrent.resolve_start` accepts an info hash and a metadata path. The helper adds
+an info-hash-only torrent with libtorrent's `default_dont_download` flag, so it
+can request metadata from DHT peers without allocating or downloading payload
+files. The only file written is the sanitized `.torrent` metadata at the
+requested path.
+
+The lookup emits:
+
+- `resolve.progress` roughly once per second with `dhtNodes`, `peers`,
+  `elapsedMs`, and a user-facing message.
+- `resolve.ready` with the preview and `metadataPath`.
+- `resolve.error` on timeout or lookup failure.
+- `resolve.cancelled` after `torrent.resolve_cancel`.
+
+The Electron main process owns the corresponding job, progress UI, timeout,
+concurrency cap, and transition to Setup. Lookups are not downloads and do not
+consume download queue slots.
+
 The helper exposes `session.*`, `torrent.*`, and `resolve.*` methods. It has no
 HTTP API, no web UI, and no remote access. It is intended to be spawned by the
 Electron main process only.
