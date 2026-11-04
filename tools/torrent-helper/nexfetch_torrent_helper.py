@@ -790,6 +790,11 @@ class Session:
             params_obj.save_path = str(Path(metadata_path).parent)
             params_obj.name = "Resolving torrent"
             params_obj.flags &= ~lt.torrent_flags.paused
+            # A metadata-only lookup must never allocate or download payload
+            # files. libtorrent still fetches the torrent metadata in this mode.
+            dont_download = getattr(lt.torrent_flags, "default_dont_download", None)
+            if dont_download is not None:
+                params_obj.flags |= dont_download
             try:
                 handle = session.add_torrent(params_obj)
             except Exception as exc:
