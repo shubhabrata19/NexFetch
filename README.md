@@ -268,6 +268,8 @@ resources/    bundled binaries and licenses (binaries ignored by Git)
   are validated before appending to a partial file.
 - Output paths remain inside the user-selected destination.
 - Filename conflicts are resolved without silent overwrites.
+- Info-hash metadata lookups run in metadata-only mode: they never allocate or
+  download payload files before the setup screen is confirmed.
 - Torrent metadata is treated as untrusted: file paths, tracker URLs, file
   counts, and metadata size are validated before a job is created.
 - Torrent metadata is sanitized before use: trackers that resolve to private or
