@@ -1,5 +1,6 @@
 import { BrowserWindow, nativeTheme } from 'electron'
 import { join } from 'node:path'
+import { attachContextMenu } from './context-menu'
 import type { Logger } from './services/logger'
 
 export function createMainWindow(isDev: boolean, logger: Logger): BrowserWindow {
@@ -28,6 +29,8 @@ export function createMainWindow(isDev: boolean, logger: Logger): BrowserWindow 
       spellcheck: false,
     },
   })
+
+  attachContextMenu(window.webContents, () => window)
 
   window.once('ready-to-show', () => {
     window.show()

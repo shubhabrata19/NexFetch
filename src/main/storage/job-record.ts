@@ -5,6 +5,7 @@ import type { PersistedJobRecord } from '../download/job-repository'
 
 const JOB_STATUSES: readonly JobStatus[] = [
   'setup',
+  'metadata',
   'queued',
   'resolving',
   'downloading',

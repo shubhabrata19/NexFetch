@@ -6,6 +6,7 @@ import type { EnginePreviewData } from '@shared/domain/engine'
 import type { TorrentPreview, TorrentPreviewEnvelope } from '@shared/domain/torrent'
 import type { PreviewCache } from '../../download/preview-cache'
 import type { Logger } from '../../services/logger'
+import { torrentEnginePreview } from './torrent-engine'
 import type { TorrentEngine, TorrentPreviewData } from './torrent-engine'
 
 const MAX_TORRENT_BYTES = 10 * 1024 * 1024
@@ -79,7 +80,7 @@ export class TorrentPreviewService {
     }
   }
 
-  async previewInfoHash(
+  async resolveInfoHashMetadata(
     infoHash: string,
     hashVersion: 1 | 2,
     signal: AbortSignal,
@@ -90,17 +91,10 @@ export class TorrentPreviewService {
       elapsedMs: number
       message: string
     }) => void,
-  ): Promise<TorrentPreviewEnvelope> {
+  ): Promise<{ preview: TorrentPreview; metadataPath: string }> {
     await mkdir(this.cacheDirectory, { recursive: true })
     const metadataPath = join(this.cacheDirectory, `${infoHash}.torrent`)
-    const resolved = await this.engine.resolveInfoHash(
-      infoHash,
-      hashVersion,
-      metadataPath,
-      signal,
-      onProgress,
-    )
-    return this.storePreview(resolved.preview, resolved.metadataPath, signal)
+    return this.engine.resolveInfoHash(infoHash, hashVersion, metadataPath, signal, onProgress)
   }
 
   private async storePreview(
@@ -115,22 +109,7 @@ export class TorrentPreviewService {
       await copyFile(metadataSource, metadataPath)
     }
 
-    const data: TorrentPreviewData = { ...preview, metadataPath }
-    const enginePreview: EnginePreviewData = {
-      engineId: 'torrent',
-      source: {
-        kind: 'torrent',
-        infoHash: preview.infoHash,
-        hashVersion: preview.hashVersion,
-        sourceKind: preview.sourceKind,
-        displayName: preview.title,
-      },
-      title: preview.title,
-      subtitle: null,
-      thumbnailUrl: null,
-      durationSeconds: null,
-      data,
-    }
+    const enginePreview = torrentEnginePreview(preview, metadataPath)
 
     this.logger.info('torrent_preview_ready', {
       infoHash: preview.infoHash.slice(0, 12),

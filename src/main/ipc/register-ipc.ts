@@ -1,4 +1,4 @@
-import { app, dialog, ipcMain, nativeTheme, shell } from 'electron'
+import { app, clipboard, dialog, ipcMain, nativeTheme, shell } from 'electron'
 import type { BrowserWindow, IpcMainInvokeEvent } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
@@ -15,7 +15,6 @@ import type {
   TorrentSetupUpdateRequest,
 } from '@shared/ipc/contracts'
 import { IPC } from '@shared/ipc/channels'
-import { parseTorrentInfoHash } from '@shared/domain/torrent-hash'
 import {
   createJobRequestSchema,
   jobIdRequestSchema,
@@ -24,10 +23,9 @@ import {
   previewRequestSchema,
   torrentBytesPreviewRequestSchema,
   torrentCancelPreviewSchema,
-  torrentInfoHashSchema,
   torrentLimitsRequestSchema,
+  torrentLookupRequestSchema,
   torrentPreviewFileRequestSchema,
-  torrentPreviewRequestSchema,
   torrentSetupUpdateSchema,
   youtubeCancelPreviewSchema,
   youtubePreviewRequestSchema,
@@ -59,6 +57,7 @@ const INVOKE_CHANNELS = [
   IPC.settingsGet,
   IPC.settingsUpdate,
   IPC.chooseDirectory,
+  IPC.readClipboardText,
   IPC.openDestination,
   IPC.openLogs,
   IPC.dependenciesStatus,
@@ -71,8 +70,8 @@ const INVOKE_CHANNELS = [
   IPC.torrentChooseFile,
   IPC.torrentPreviewFile,
   IPC.torrentPreviewBytes,
-  IPC.torrentPreviewInfoHash,
   IPC.torrentCancelPreview,
+  IPC.torrentLookup,
   IPC.jobsCreate,
   IPC.jobsStartSetup,
   IPC.jobsList,
@@ -326,6 +325,11 @@ export function registerIpc(dependencies: IpcDependencies): () => void {
     return null
   })
 
+  handle<void, string>(IPC.readClipboardText, null, async () => {
+    const text = await clipboard.readText()
+    return text.slice(0, 100_000)
+  })
+
   handle<void, string | null>(IPC.torrentChooseFile, null, async () => {
     const window = getWindow()
     if (!window) throw new DomainError('INTERNAL_ERROR', 'The application window is unavailable.')
@@ -358,29 +362,9 @@ export function registerIpc(dependencies: IpcDependencies): () => void {
     }
   })
 
-  handle(IPC.torrentPreviewInfoHash, torrentPreviewRequestSchema, async (request) => {
-    const parsed = parseTorrentInfoHash(torrentInfoHashSchema.parse(request.infoHash))
-    if (!parsed) {
-      throw new DomainError(
-        'TORRENT_INVALID',
-        'Enter a valid v1 (40 hex / 32 base32) or v2 (64 hex) info hash.',
-      )
-    }
-    const controller = new AbortController()
-    torrentPreviewControllers.set(request.requestId, controller)
-    try {
-      return await torrentPreview.previewInfoHash(
-        parsed.infoHash,
-        parsed.version,
-        controller.signal,
-        (progress) => {
-          getWindow()?.webContents.send(IPC.torrentPreviewProgress, progress)
-        },
-      )
-    } finally {
-      torrentPreviewControllers.delete(request.requestId)
-    }
-  })
+  handle(IPC.torrentLookup, torrentLookupRequestSchema, (request) =>
+    downloadManager.startMetadataLookup(request.infoHash),
+  )
 
   handle(IPC.torrentCancelPreview, torrentCancelPreviewSchema, ({ requestId }) => {
     torrentPreviewControllers.get(requestId)?.abort()

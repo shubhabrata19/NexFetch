@@ -27,6 +27,7 @@ const api: NexFetchApi = {
   },
   system: {
     chooseDirectory: () => invoke(IPC.chooseDirectory),
+    readClipboardText: () => invoke(IPC.readClipboardText),
     openDestination: () => invoke(IPC.openDestination),
     openLogs: () => invoke(IPC.openLogs),
   },
@@ -51,10 +52,8 @@ const api: NexFetchApi = {
     previewFile: (path, requestId) => invoke(IPC.torrentPreviewFile, { path, requestId }),
     previewBytes: (requestId, name, dataBase64) =>
       invoke(IPC.torrentPreviewBytes, { requestId, name, dataBase64 }),
-    previewInfoHash: (requestId, infoHash) =>
-      invoke(IPC.torrentPreviewInfoHash, { requestId, infoHash }),
+    lookup: (infoHash) => invoke(IPC.torrentLookup, { infoHash }),
     cancelPreview: (requestId) => invoke(IPC.torrentCancelPreview, { requestId }),
-    onPreviewProgress: (listener) => subscribe(IPC.torrentPreviewProgress, listener),
   },
   jobs: {
     create: (request) => invoke(IPC.jobsCreate, request),

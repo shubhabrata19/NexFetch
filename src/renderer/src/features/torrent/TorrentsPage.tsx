@@ -55,6 +55,7 @@ interface SetupState {
 
 const STATUS_LABELS: Record<string, string> = {
   setup: 'Setup',
+  metadata: 'Metadata',
   queued: 'Queued',
   resolving: 'Preparing',
   downloading: 'Downloading',
@@ -80,12 +81,37 @@ function isSetupJob(job: DownloadJob): boolean {
   return job.status === 'setup'
 }
 
+function isMetadataJob(job: DownloadJob): boolean {
+  return job.status === 'metadata'
+}
+
+function isMetadataLookupJob(job: DownloadJob): boolean {
+  return (
+    job.engineId === 'torrent' &&
+    job.details?.engineId === 'torrent' &&
+    job.details.lookup !== undefined
+  )
+}
+
+function formatElapsed(milliseconds: number): string {
+  const seconds = Math.max(0, Math.floor(milliseconds / 1000))
+  const minutes = Math.floor(seconds / 60)
+  return minutes > 0 ? `${minutes}m ${seconds % 60}s` : `${seconds}s`
+}
+
+function metadataFailureTitle(job: DownloadJob): string {
+  if (job.error?.code === 'TORRENT_UNAVAILABLE') return 'Torrent engine unavailable'
+  if (job.error?.code === 'TORRENT_INVALID') return 'Lookup failed'
+  return 'Metadata not found'
+}
+
 function isSeedingJob(job: DownloadJob): boolean {
   return job.status === 'seeding'
 }
 
 function isActiveJob(job: DownloadJob): boolean {
   return [
+    'metadata',
     'queued',
     'resolving',
     'downloading',
@@ -157,6 +183,7 @@ function TorrentListItem({
     job.status === 'downloading' ||
     job.status === 'seeding'
   const canResume = job.status === 'paused'
+  const canCloseLookup = job.status === 'metadata'
   return (
     <div
       className={`torrent-list-item${selected ? ' torrent-list-item--selected' : ''}`}
@@ -169,7 +196,19 @@ function TorrentListItem({
           </span>
           <TorrentStatus job={job} />
         </div>
-        {isSetupJob(job) ? (
+        {isMetadataJob(job) ? (
+          <>
+            <div className="progress-track progress-track--compact progress-track--indeterminate">
+              <span className="progress-fill" />
+            </div>
+            <div className="torrent-list-meta">
+              <span>{details?.lookup?.phase === 'queued' ? 'Waiting…' : 'Finding peers…'}</span>
+              <span>{formatElapsed(details?.lookup?.elapsedMs ?? 0)}</span>
+              <span>{details?.lookup?.peers ?? 0} peers</span>
+              <span>{details?.lookup?.dhtNodes ?? '—'} DHT</span>
+            </div>
+          </>
+        ) : isSetupJob(job) ? (
           <div className="torrent-list-meta">
             <span>
               {formatBytes(
@@ -178,7 +217,20 @@ function TorrentListItem({
                   0,
               )}
             </span>
-            <span>{details?.files.length ?? 0} files</span>
+            <span>
+              {details?.files.length ?? 0} {(details?.files.length ?? 0) === 1 ? 'file' : 'files'}
+            </span>
+          </div>
+        ) : isMetadataLookupJob(job) ? (
+          <div className="torrent-list-meta">
+            <span>
+              {job.status === 'cancelled'
+                ? 'Lookup cancelled'
+                : job.error?.code === 'TORRENT_NO_PEERS'
+                  ? 'No metadata found'
+                  : 'Lookup failed'}
+            </span>
+            <span>{details?.lookup?.dhtNodes ?? '—'} DHT</span>
           </div>
         ) : job.status === 'seeding' ? (
           <div className="torrent-list-meta">
@@ -242,8 +294,10 @@ function TorrentListItem({
           type="button"
           className="torrent-list-icon torrent-list-icon--danger"
           onClick={onClose}
-          title={`Close ${job.title}`}
-          aria-label={`Close ${job.title}`}
+          title={canCloseLookup ? `Cancel metadata lookup for ${job.title}` : `Close ${job.title}`}
+          aria-label={
+            canCloseLookup ? `Cancel metadata lookup for ${job.title}` : `Close ${job.title}`
+          }
         >
           <Icon name="x" size={13} />
         </button>
@@ -426,6 +480,105 @@ function DiscoveryPanel({ details }: { details: TorrentJobDetails }) {
   )
 }
 
+function MetadataLookupPanel({
+  job,
+  details,
+  onCancel,
+  onRetry,
+  onAddTorrent,
+}: {
+  job: DownloadJob
+  details: TorrentJobDetails
+  onCancel: () => void
+  onRetry: () => void
+  onAddTorrent: () => void
+}) {
+  const lookup = details.lookup
+  const failed = job.status === 'failed' || job.status === 'cancelled'
+  const queued = lookup?.phase === 'queued'
+  const message =
+    job.error?.message ??
+    lookup?.message ??
+    'NexFetch is asking the DHT for peers that can provide this torrent’s metadata.'
+
+  return (
+    <div className="torrent-detail-body">
+      <section className="torrent-metadata-panel">
+        <div className="torrent-metadata-heading">
+          <span
+            className={`torrent-metadata-icon${failed ? ' torrent-metadata-icon--failed' : ''}`}
+          >
+            {failed ? (
+              <Icon name="alert" size={20} />
+            ) : (
+              <span className="spinner torrent-metadata-spinner" aria-hidden="true" />
+            )}
+          </span>
+          <div>
+            <p className="eyebrow">Metadata lookup</p>
+            <h3>
+              {failed
+                ? job.status === 'cancelled'
+                  ? 'Lookup cancelled'
+                  : metadataFailureTitle(job)
+                : queued
+                  ? 'Waiting for a lookup slot…'
+                  : 'Finding peers on the DHT…'}
+            </h3>
+            <p className="torrent-metadata-copy">{message}</p>
+          </div>
+        </div>
+
+        <div className="torrent-stat-grid torrent-stat-grid--metadata">
+          <div>
+            <span>Elapsed</span>
+            <strong>{formatElapsed(lookup?.elapsedMs ?? 0)}</strong>
+          </div>
+          <div>
+            <span>Peers</span>
+            <strong>{lookup?.peers ?? 0}</strong>
+          </div>
+          <div>
+            <span>DHT nodes</span>
+            <strong>{lookup?.dhtNodes ?? '—'}</strong>
+          </div>
+          <div>
+            <span>Hash version</span>
+            <strong>v{details.hashVersion}</strong>
+          </div>
+        </div>
+
+        {!failed ? (
+          <div className="progress-track progress-track--indeterminate" role="status">
+            <span className="progress-fill" />
+          </div>
+        ) : null}
+
+        <p className="torrent-metadata-guidance">
+          No files are downloaded during this step. Private torrents cannot be discovered through
+          the DHT, and a lookup can take up to 3 minutes. If it does not finish, open the .torrent
+          file instead.
+        </p>
+
+        <div className="torrent-metadata-actions">
+          {failed ? (
+            <button type="button" className="button button--primary" onClick={onRetry}>
+              <Icon name="refresh" size={16} /> Retry lookup
+            </button>
+          ) : (
+            <button type="button" className="button button--secondary" onClick={onCancel}>
+              <Icon name="x" size={16} /> Cancel lookup
+            </button>
+          )}
+          <button type="button" className="button button--ghost" onClick={onAddTorrent}>
+            <Icon name="folder" size={16} /> Use a .torrent file
+          </button>
+        </div>
+      </section>
+    </div>
+  )
+}
+
 export function TorrentsPage({
   settings,
   jobs,
@@ -466,8 +619,18 @@ export function TorrentsPage({
   const torrents = useMemo(
     () =>
       jobs.filter(isTorrentJob).sort((a, b) => {
-        const aRank = isSetupJob(a) ? 0 : isActiveJob(a) ? 1 : isSeedingJob(a) ? 2 : 3
-        const bRank = isSetupJob(b) ? 0 : isActiveJob(b) ? 1 : isSeedingJob(b) ? 2 : 3
+        const rank = (job: DownloadJob): number =>
+          isMetadataJob(job)
+            ? 0
+            : isSetupJob(job)
+              ? 1
+              : isActiveJob(job)
+                ? 2
+                : isSeedingJob(job)
+                  ? 3
+                  : 4
+        const aRank = rank(a)
+        const bRank = rank(b)
         if (aRank !== bRank) return aRank - bRank
         return b.createdAt.localeCompare(a.createdAt)
       }),
@@ -477,7 +640,14 @@ export function TorrentsPage({
   const filtered = useMemo(() => {
     const normalized = search.trim().toLowerCase()
     return torrents.filter((job) => {
-      if (normalized && !job.title.toLowerCase().includes(normalized)) return false
+      const details = torrentDetails(job)
+      if (
+        normalized &&
+        !job.title.toLowerCase().includes(normalized) &&
+        !details?.infoHash.toLowerCase().includes(normalized)
+      ) {
+        return false
+      }
       if (filter === 'setup') return isSetupJob(job)
       if (filter === 'downloading') return isActiveJob(job)
       if (filter === 'seeding') return isSeedingJob(job)
@@ -508,9 +678,9 @@ export function TorrentsPage({
     })
     setSetupError(null)
     setDetailTab('files')
-    // Reset only when a different torrent is selected, not on every progress update.
+    // Reset when the selected torrent changes or metadata becomes ready.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected?.id])
+  }, [selected?.id, selected?.status])
 
   useEffect(() => {
     if (!selected || selected.status !== 'seeding') {
@@ -525,13 +695,16 @@ export function TorrentsPage({
   }, [selected?.id, selected?.status])
 
   const groups = useMemo(() => {
+    const preparingItems = filtered.filter(isMetadataJob)
     const setupItems = filtered.filter(isSetupJob)
     const activeItems = filtered.filter(
-      (job) => !isSetupJob(job) && !isSeedingJob(job) && !isCompletedJob(job),
+      (job) =>
+        !isMetadataJob(job) && !isSetupJob(job) && !isSeedingJob(job) && !isCompletedJob(job),
     )
     const seedingItems = filtered.filter(isSeedingJob)
     const completedItems = filtered.filter(isCompletedJob)
     return [
+      { label: 'Preparing', items: preparingItems },
       { label: 'Setup', items: setupItems },
       { label: 'Downloading', items: activeItems },
       { label: 'Seeding', items: seedingItems },
@@ -686,13 +859,15 @@ export function TorrentsPage({
                       onResume={() => onResumeJob(job.id)}
                       onClose={() => {
                         const message =
-                          job.status === 'setup'
-                            ? 'Discard this torrent setup?'
-                            : job.status === 'completed' ||
-                                job.status === 'failed' ||
-                                job.status === 'cancelled'
-                              ? 'Remove this torrent from the list? Downloaded files stay on disk.'
-                              : 'Close this torrent? Partial files stay on disk.'
+                          job.status === 'metadata'
+                            ? 'Cancel this metadata lookup and remove it from the list?'
+                            : job.status === 'setup'
+                              ? 'Discard this torrent setup?'
+                              : job.status === 'completed' ||
+                                  job.status === 'failed' ||
+                                  job.status === 'cancelled'
+                                ? 'Remove this torrent from the list? Downloaded files stay on disk.'
+                                : 'Close this torrent? Partial files stay on disk.'
                         if (window.confirm(message)) onCloseTorrent(job.id)
                       }}
                     />
@@ -719,23 +894,36 @@ export function TorrentsPage({
                   <div className="torrent-title-line">
                     <h2>{selected.title}</h2>
                     <TorrentStatus job={selected} />
-                    <span
-                      className={`badge ${selectedDetails.isPrivate ? 'badge--warning' : 'badge--neutral'}`}
-                    >
-                      {selectedDetails.isPrivate ? 'Private' : 'Public'}
-                    </span>
+                    {!isMetadataLookupJob(selected) ? (
+                      <span
+                        className={`badge ${selectedDetails.isPrivate ? 'badge--warning' : 'badge--neutral'}`}
+                      >
+                        {selectedDetails.isPrivate ? 'Private' : 'Public'}
+                      </span>
+                    ) : null}
                   </div>
                   <p className="torrent-subtitle">
-                    {formatBytes(
-                      selected.progress.totalBytes ??
-                        selectedDetails.files.reduce((sum, file) => sum + file.sizeBytes, 0),
-                    )}{' '}
-                    · {selectedDetails.files.length} files ·{' '}
-                    <span className="mono">{selectedDetails.infoHash.slice(0, 12)}…</span>
+                    {isMetadataLookupJob(selected) ? (
+                      <>
+                        v{selectedDetails.hashVersion} ·{' '}
+                        <span className="mono torrent-full-hash">{selectedDetails.infoHash}</span>
+                      </>
+                    ) : (
+                      <>
+                        {formatBytes(
+                          selected.progress.totalBytes ??
+                            selectedDetails.files.reduce((sum, file) => sum + file.sizeBytes, 0),
+                        )}{' '}
+                        · {selectedDetails.files.length}{' '}
+                        {selectedDetails.files.length === 1 ? 'file' : 'files'} ·{' '}
+                        <span className="mono">{selectedDetails.infoHash.slice(0, 12)}…</span>
+                      </>
+                    )}
                   </p>
                 </div>
                 <div className="torrent-detail-actions">
-                  {isSetupJob(selected) ? null : selected.status === 'paused' ? (
+                  {isSetupJob(selected) ? null : selected.status ===
+                    'metadata' ? null : selected.status === 'paused' ? (
                     <button
                       type="button"
                       className="button button--secondary button--small"
@@ -782,7 +970,8 @@ export function TorrentsPage({
                       <Icon name="folder" size={15} /> Open folder
                     </button>
                   ) : null}
-                  {selected.status === 'failed' || selected.status === 'cancelled' ? (
+                  {(selected.status === 'failed' || selected.status === 'cancelled') &&
+                  !isMetadataLookupJob(selected) ? (
                     <button
                       type="button"
                       className="button button--secondary button--small"
@@ -806,7 +995,15 @@ export function TorrentsPage({
                 </div>
               </header>
 
-              {isSetupJob(selected) && setup ? (
+              {isMetadataLookupJob(selected) && !isSetupJob(selected) ? (
+                <MetadataLookupPanel
+                  job={selected}
+                  details={selectedDetails}
+                  onCancel={() => onCancelJob(selected.id)}
+                  onRetry={() => onRetryJob(selected.id)}
+                  onAddTorrent={onAddTorrent}
+                />
+              ) : isSetupJob(selected) && setup ? (
                 <div className="torrent-detail-body">
                   <section className="torrent-setup-section">
                     <div className="torrent-section-heading">
@@ -1142,7 +1339,9 @@ export function TorrentsPage({
                     ) : null}
                   </section>
 
-                  {!isSetupJob(selected) && !isCompletedJob(selected) ? (
+                  {!isSetupJob(selected) &&
+                  !isCompletedJob(selected) &&
+                  !isMetadataLookupJob(selected) ? (
                     <div className="torrent-danger-zone">
                       <button
                         type="button"
@@ -1162,7 +1361,7 @@ export function TorrentsPage({
                 </div>
               )}
 
-              {selected.error ? (
+              {selected.error && !isMetadataLookupJob(selected) ? (
                 <p className="job-error torrent-detail-error" role="alert">
                   {selected.error.message}
                 </p>

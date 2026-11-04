@@ -29,6 +29,7 @@ export type DownloadSource = YoutubeDownloadSource | HttpDownloadSource | Torren
 
 export type JobStatus =
   | 'setup'
+  | 'metadata'
   | 'queued'
   | 'resolving'
   | 'downloading'

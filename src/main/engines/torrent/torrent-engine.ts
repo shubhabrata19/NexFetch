@@ -124,6 +124,28 @@ function isTorrentSource(source: DownloadSource | EnginePreviewData['source']): 
   return source.kind === 'torrent'
 }
 
+export function torrentEnginePreview(
+  preview: TorrentPreview,
+  metadataPath: string,
+): EnginePreviewData {
+  const data: TorrentPreviewData = { ...preview, metadataPath }
+  return {
+    engineId: 'torrent',
+    source: {
+      kind: 'torrent',
+      infoHash: preview.infoHash,
+      hashVersion: preview.hashVersion,
+      sourceKind: preview.sourceKind,
+      displayName: preview.title,
+    },
+    title: preview.title,
+    subtitle: null,
+    thumbnailUrl: null,
+    durationSeconds: null,
+    data,
+  }
+}
+
 export class TorrentEngine implements DownloadEngine {
   readonly id = 'torrent'
   readonly displayName = 'Torrent'
@@ -201,6 +223,14 @@ export class TorrentEngine implements DownloadEngine {
     } catch (error) {
       throw this.toDomainError(error)
     }
+  }
+
+  createSetup(preview: TorrentPreview, metadataPath: string): EngineSelection {
+    const enginePreview = torrentEnginePreview(preview, metadataPath)
+    return this.resolveSelection(enginePreview, {
+      fileIndices: preview.files.map((file) => file.index),
+      seedAfterComplete: this.settings.get().torrentSeedAfterComplete,
+    })
   }
 
   resolveSelection(preview: EnginePreviewData, selection: unknown): EngineSelection {

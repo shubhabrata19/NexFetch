@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
   AppInfo,
   CreateJobRequest,
@@ -48,6 +48,7 @@ export default function App() {
   const [view, setView] = useState<View>('downloads')
   const [downloadSource, setDownloadSource] = useState<SourceTab>('youtube')
   const [selectedTorrentId, setSelectedTorrentId] = useState<string | null>(null)
+  const [lastTorrentLookupId, setLastTorrentLookupId] = useState<string | null>(null)
   const [info, setInfo] = useState<AppInfo | null>(null)
   const [settings, setSettings] = useState<Settings | null>(null)
   const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>(() => resolveTheme('system'))
@@ -115,6 +116,16 @@ export default function App() {
     }
     if (jobsResult.ok) {
       setJobs(jobsResult.data)
+      const activeLookup = jobsResult.data
+        .filter(
+          (job) =>
+            job.engineId === 'torrent' &&
+            job.details?.engineId === 'torrent' &&
+            job.details.lookup !== undefined &&
+            job.status === 'metadata',
+        )
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
+      if (activeLookup) setLastTorrentLookupId(activeLookup.id)
     } else {
       showToast('error', jobsResult.error.message)
     }
@@ -132,6 +143,7 @@ export default function App() {
     const unsubscribeJobs = window.nexfetch.jobs.onChanged(upsertJob)
     const unsubscribeRemoved = window.nexfetch.jobs.onRemoved((jobId) => {
       setJobs((previous) => previous.filter((job) => job.id !== jobId))
+      setLastTorrentLookupId((current) => (current === jobId ? null : current))
     })
     return () => {
       unsubscribeSettings()
@@ -140,6 +152,36 @@ export default function App() {
       unsubscribeRemoved()
     }
   }, [upsertJob])
+
+  const lastLookupStatusRef = useRef<string | null>(null)
+  const lastLookupIdRef = useRef<string | null>(null)
+  useEffect(() => {
+    const lookup = jobs.find((job) => job.id === lastTorrentLookupId)
+    if (!lookup) {
+      lastLookupIdRef.current = null
+      lastLookupStatusRef.current = null
+      return
+    }
+    if (lastLookupIdRef.current !== lookup.id) {
+      lastLookupIdRef.current = lookup.id
+      lastLookupStatusRef.current = lookup.status
+      if (lookup.status === 'setup') {
+        showToast('success', `Metadata ready for ${lookup.title}. Review the setup in Torrents.`)
+      } else if (lookup.status === 'failed') {
+        showToast('error', lookup.error?.message ?? 'The torrent metadata could not be found.')
+      }
+      return
+    }
+
+    const previous = lastLookupStatusRef.current
+    lastLookupStatusRef.current = lookup.status
+    if (previous === 'metadata' && lookup.status === 'setup') {
+      showToast('success', `Metadata ready for ${lookup.title}. Review the setup in Torrents.`)
+    }
+    if (previous === 'metadata' && lookup.status === 'failed') {
+      showToast('error', lookup.error?.message ?? 'The torrent metadata could not be found.')
+    }
+  }, [jobs, lastTorrentLookupId, showToast])
 
   const theme = settings?.theme
   useEffect(() => {
@@ -250,9 +292,22 @@ export default function App() {
         return null
       }
       upsertJob(result.data)
-      setSelectedTorrentId(result.data.id)
-      setView('torrents')
       showToast('success', 'Torrent ready to set up.')
+      return result.data
+    },
+    [showToast, upsertJob],
+  )
+
+  const lookupTorrent = useCallback(
+    async (infoHash: string): Promise<DownloadJob | null> => {
+      const result = await window.nexfetch.torrent.lookup(infoHash)
+      if (!result.ok) {
+        showToast('error', result.error.message)
+        return null
+      }
+      upsertJob(result.data)
+      setLastTorrentLookupId(result.data.id)
+      showToast('info', 'Searching the DHT for torrent metadata…')
       return result.data
     },
     [showToast, upsertJob],
@@ -406,16 +461,22 @@ export default function App() {
   const retryJob = useCallback(
     (jobId: string): void => {
       void (async () => {
+        const previous = jobs.find((job) => job.id === jobId)
         const result = await window.nexfetch.jobs.retry({ jobId })
         if (!result.ok) {
           showToast('error', result.error.message)
           return
         }
         upsertJob(result.data)
-        showToast('info', 'Download queued again.')
+        if (previous?.details?.engineId === 'torrent' && previous.details.lookup !== undefined) {
+          setLastTorrentLookupId(jobId)
+          showToast('info', 'Retrying the metadata lookup.')
+        } else {
+          showToast('info', 'Download queued again.')
+        }
       })()
     },
-    [showToast, upsertJob],
+    [jobs, showToast, upsertJob],
   )
 
   const removeJob = useCallback(
@@ -427,6 +488,7 @@ export default function App() {
           return
         }
         setJobs((previous) => previous.filter((job) => job.id !== jobId))
+        setLastTorrentLookupId((current) => (current === jobId ? null : current))
       })()
     },
     [showToast],
@@ -456,6 +518,7 @@ export default function App() {
           }
           setJobs((previous) => previous.filter((candidate) => candidate.id !== jobId))
           setSelectedTorrentId((current) => (current === jobId ? null : current))
+          setLastTorrentLookupId((current) => (current === jobId ? null : current))
         } catch {
           showToast('error', 'The torrent could not be closed.')
         }
@@ -511,9 +574,11 @@ export default function App() {
             engines={engines}
             jobs={jobs}
             source={downloadSource}
+            lastTorrentLookupId={lastTorrentLookupId}
             onSourceChange={setDownloadSource}
             onCreateJob={createJob}
             onCreateTorrent={createTorrentSetup}
+            onLookupTorrent={lookupTorrent}
             onOpenTorrent={openTorrent}
             onCancelJob={cancelJob}
             onPauseJob={pauseJob}

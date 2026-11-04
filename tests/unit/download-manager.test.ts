@@ -11,7 +11,9 @@ import type {
   EngineRunContext,
 } from '@shared/domain/engine'
 import type { DownloadSource } from '@shared/domain/job'
+import type { TorrentPreview } from '@shared/domain/torrent'
 import { DownloadManager } from '@main/download/download-manager'
+import type { TorrentMetadataProvider } from '@main/download/download-manager'
 import { JsonJobRepository } from '@main/download/job-repository'
 import type { PersistedJobRecord } from '@main/download/job-repository'
 import { PreviewCache } from '@main/download/preview-cache'
@@ -48,7 +50,11 @@ const temporaryDirectories: string[] = []
 
 function createFixture(
   initialMode: 'complete' | 'hang',
-  options: { pauseResume?: boolean; resumeAfterRestart?: boolean } = {},
+  options: {
+    pauseResume?: boolean
+    resumeAfterRestart?: boolean
+    torrentMetadata?: TorrentMetadataProvider
+  } = {},
 ): {
   manager: DownloadManager
   settings: SettingsService
@@ -137,6 +143,7 @@ function createFixture(
     } as unknown as DependencyService,
     previews,
     logger: new Logger(join(directory, 'logs')),
+    torrentMetadata: options.torrentMetadata,
     onJobChanged: (job) => jobEvents.push(`${job.id}:${job.status}`),
     onJobRemoved: () => undefined,
   })
@@ -193,6 +200,75 @@ async function waitFor(predicate: () => boolean, timeoutMs = 3000): Promise<void
     await new Promise((resolve) => setTimeout(resolve, 20))
   }
   throw new Error('Timed out waiting for condition')
+}
+
+const TORRENT_HASH = '08ada5a7a6183aae1e09d831df6748d566095a10'
+
+function torrentPreview(): TorrentPreview {
+  return {
+    title: 'Sintel',
+    totalBytes: 123,
+    files: [
+      {
+        index: 0,
+        path: 'Sintel/Sintel.mp4',
+        name: 'Sintel.mp4',
+        sizeBytes: 123,
+        selected: true,
+        executable: false,
+        downloadedBytes: null,
+      },
+    ],
+    fileCount: 1,
+    infoHash: TORRENT_HASH,
+    hashVersion: 1,
+    isPrivate: false,
+    trackers: [],
+    sourceKind: 'infohash',
+    createdAt: null,
+    createdBy: null,
+    comment: null,
+    webSeedCount: 0,
+  }
+}
+
+function metadataProvider(): {
+  provider: TorrentMetadataProvider
+  release: (value: { preview: TorrentPreview; metadataPath: string }) => void
+  fail: (error: Error) => void
+} {
+  let release: ((value: { preview: TorrentPreview; metadataPath: string }) => void) | null = null
+  let fail: ((error: Error) => void) | null = null
+
+  return {
+    provider: {
+      resolve: (_infoHash, _hashVersion, signal) =>
+        new Promise((resolve, reject) => {
+          const onAbort = (): void => {
+            reject(new DomainError('CANCELLED', 'cancelled'))
+          }
+          signal.addEventListener('abort', onAbort, { once: true })
+          release = (value) => {
+            signal.removeEventListener('abort', onAbort)
+            resolve(value)
+          }
+          fail = (error) => {
+            signal.removeEventListener('abort', onAbort)
+            reject(error)
+          }
+        }),
+      createSelection: () => ({
+        engineId: 'fake',
+        data: {},
+        requiredDependencies: [],
+        filenameBase: 'torrent',
+        details: null,
+        verification: null,
+      }),
+    },
+    release: (value) => release?.(value),
+    fail: (error) => fail?.(error),
+  }
 }
 
 afterEach(() => {
@@ -334,5 +410,57 @@ describe('download manager', () => {
     expect(fixture.manager.getJob('queued')?.status).toBe('queued')
     expect(fixture.manager.getJob('paused')?.status).toBe('paused')
     void fixture.manager.shutdown()
+  })
+
+  it('creates a metadata job immediately and transitions it to setup', async () => {
+    const metadata = metadataProvider()
+    const fixture = createFixture('complete', { torrentMetadata: metadata.provider })
+    const job = await fixture.manager.startMetadataLookup(TORRENT_HASH)
+
+    expect(job.status).toBe('metadata')
+    expect(job.details?.engineId).toBe('torrent')
+    expect(fixture.manager.listJobs().some((entry) => entry.id === job.id)).toBe(true)
+
+    metadata.release({ preview: torrentPreview(), metadataPath: 'C:/metadata.torrent' })
+    await waitFor(() => fixture.manager.getJob(job.id)?.status === 'setup')
+
+    const setup = fixture.manager.getJob(job.id)
+    expect(setup?.title).toBe('Sintel')
+    expect(setup?.source.kind).toBe('torrent')
+    expect(setup?.progress.totalBytes).toBe(123)
+    await fixture.manager.removeJob(job.id)
+    await fixture.manager.shutdown()
+  })
+
+  it('cancels a metadata lookup and rejects duplicate hashes', async () => {
+    const metadata = metadataProvider()
+    const fixture = createFixture('complete', { torrentMetadata: metadata.provider })
+    const job = await fixture.manager.startMetadataLookup(TORRENT_HASH)
+
+    await expect(fixture.manager.startMetadataLookup(TORRENT_HASH)).rejects.toMatchObject({
+      code: 'TORRENT_DUPLICATE',
+    })
+
+    const cancelled = await fixture.manager.cancelJob(job.id)
+    expect(cancelled.status).toBe('cancelled')
+    await fixture.manager.removeJob(job.id)
+    await fixture.manager.shutdown()
+  })
+
+  it('keeps metadata jobs visible when the lookup fails', async () => {
+    const metadata = metadataProvider()
+    const fixture = createFixture('complete', { torrentMetadata: metadata.provider })
+    const job = await fixture.manager.startMetadataLookup(TORRENT_HASH)
+
+    metadata.fail(new DomainError('TORRENT_NO_PEERS', 'No peers shared metadata.'))
+    await waitFor(() => fixture.manager.getJob(job.id)?.status === 'failed')
+
+    const failed = fixture.manager.getJob(job.id)
+    expect(failed?.error?.code).toBe('TORRENT_NO_PEERS')
+    expect(failed?.details?.engineId === 'torrent' ? failed.details.lookup?.phase : null).toBe(
+      'failed',
+    )
+    await fixture.manager.removeJob(job.id)
+    await fixture.manager.shutdown()
   })
 })

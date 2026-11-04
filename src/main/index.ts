@@ -79,6 +79,7 @@ function activeTransfers(): DownloadJob[] {
     .filter(
       (job) =>
         job.status !== 'setup' &&
+        job.status !== 'metadata' &&
         job.status !== 'paused' &&
         job.status !== 'completed' &&
         job.status !== 'failed' &&
@@ -422,6 +423,12 @@ if (!gotSingleInstanceLock) {
         dependencies: dependencyService,
         previews: previewCache,
         logger: appLogger,
+        torrentMetadata: {
+          resolve: (infoHash, hashVersion, signal, onProgress) =>
+            torrentPreview.resolveInfoHashMetadata(infoHash, hashVersion, signal, onProgress),
+          createSelection: (preview, metadataPath) =>
+            torrentEngine.createSetup(preview, metadataPath),
+        },
         onJobChanged: (job) => {
           const window = getMainWindow()
           if (window && !window.isDestroyed()) {

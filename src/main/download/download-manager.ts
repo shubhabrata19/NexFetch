@@ -1,9 +1,21 @@
 import { randomUUID } from 'node:crypto'
 import { DomainError } from '@shared/domain/errors'
 import type { AppError } from '@shared/domain/errors'
-import type { DownloadEngine, EngineEvent, EngineRunContext } from '@shared/domain/engine'
+import type {
+  DownloadEngine,
+  EngineEvent,
+  EngineRunContext,
+  EngineSelection,
+} from '@shared/domain/engine'
 import type { DownloadJob, JobStatus } from '@shared/domain/job'
 import { emptyProgress } from '@shared/domain/job'
+import type {
+  TorrentJobDetails,
+  TorrentPreview,
+  TorrentResolveProgress,
+} from '@shared/domain/torrent'
+import { parseTorrentInfoHash } from '@shared/domain/torrent-hash'
+import { defaultTorrentDestination, torrentFolderName } from '@shared/domain/torrent-paths'
 import type { CreateJobRequest, TorrentSetupUpdateRequest } from '@shared/ipc/contracts'
 import type { EngineRegistry } from '../engines/registry'
 import type { DependencyService } from '../services/dependency-service'
@@ -41,6 +53,16 @@ function scheduledTime(job: PersistedJobRecord): number | null {
   return Number.isFinite(parsed) ? parsed : null
 }
 
+export interface TorrentMetadataProvider {
+  resolve(
+    infoHash: string,
+    hashVersion: 1 | 2,
+    signal: AbortSignal,
+    onProgress: (progress: TorrentResolveProgress) => void,
+  ): Promise<{ preview: TorrentPreview; metadataPath: string }>
+  createSelection(preview: TorrentPreview, metadataPath: string): EngineSelection
+}
+
 export interface DownloadManagerOptions {
   registry: EngineRegistry
   jobs: JobRepository
@@ -50,9 +72,13 @@ export interface DownloadManagerOptions {
   dependencies: DependencyService
   previews: PreviewCache
   logger: Logger
+  torrentMetadata?: TorrentMetadataProvider
   onJobChanged: (job: DownloadJob) => void
   onJobRemoved: (jobId: string) => void
 }
+
+const MAX_METADATA_LOOKUPS = 3
+const METADATA_TIMEOUT_MS = 200_000
 
 function nonNegative(value: number | null | undefined): number | null {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null
@@ -91,6 +117,8 @@ function toAppError(error: unknown): AppError {
 
 export class DownloadManager {
   private readonly runtimes = new Map<string, JobRuntime>()
+  private readonly lookupRuntimes = new Map<string, AbortController>()
+  private lookupQueue: string[] = []
   private scheduleTimer: NodeJS.Timeout | null = null
   private shuttingDown = false
 
@@ -110,6 +138,119 @@ export class DownloadManager {
   getJob(jobId: string): DownloadJob | null {
     const job = this.options.jobs.get(jobId)
     return job ? toJobView(job) : null
+  }
+
+  async startMetadataLookup(rawInfoHash: string): Promise<DownloadJob> {
+    const parsed = parseTorrentInfoHash(rawInfoHash)
+    if (!parsed) {
+      throw new DomainError(
+        'TORRENT_INVALID',
+        'Enter a valid v1 (40 hex / 32 base32) or v2 (64 hex) info hash.',
+      )
+    }
+    if (!this.options.torrentMetadata) {
+      throw new DomainError(
+        'UNSUPPORTED_SOURCE',
+        'Torrent metadata lookup is unavailable in this build.',
+      )
+    }
+
+    const duplicate = this.options.jobs
+      .list()
+      .find(
+        (job) =>
+          job.engineId === 'torrent' &&
+          job.details?.engineId === 'torrent' &&
+          job.details.infoHash === parsed.infoHash &&
+          job.status !== 'failed' &&
+          job.status !== 'cancelled',
+      )
+    if (duplicate) {
+      throw new DomainError(
+        'TORRENT_DUPLICATE',
+        'This torrent is already in your Torrents list. Open it there instead.',
+      )
+    }
+
+    const settings = this.options.settings.get()
+    const now = new Date().toISOString()
+    const title = `${parsed.infoHash.slice(0, 12)}…`
+    const details: TorrentJobDetails = {
+      engineId: 'torrent',
+      infoHash: parsed.infoHash,
+      hashVersion: parsed.version,
+      isPrivate: false,
+      files: [],
+      trackers: [],
+      peers: [],
+      seedsConnected: null,
+      seedsAvailable: null,
+      peersConnected: null,
+      peersAvailable: null,
+      downloadRateBytesPerSecond: null,
+      uploadRateBytesPerSecond: null,
+      uploadedBytes: null,
+      ratio: null,
+      downloadLimitBytesPerSecond: null,
+      uploadLimitBytesPerSecond: null,
+      seedAfterComplete: settings.torrentSeedAfterComplete,
+      discovery: {
+        dht: true,
+        pex: true,
+        lsd: true,
+        natMapping: settings.torrentNATMapping,
+        natStatus: null,
+        listenPort: null,
+        incomingConnections: false,
+        dhtNodes: null,
+        webSeeds: 'disabled',
+      },
+      lookup: {
+        phase: 'queued',
+        startedAt: now,
+        elapsedMs: 0,
+        peers: 0,
+        dhtNodes: null,
+        message: 'Waiting to search the DHT…',
+      },
+    }
+    const job: PersistedJobRecord = {
+      id: randomUUID(),
+      revision: 1,
+      engineId: 'torrent',
+      source: {
+        kind: 'torrent',
+        infoHash: parsed.infoHash,
+        hashVersion: parsed.version,
+        sourceKind: 'infohash',
+        displayName: title,
+      },
+      title,
+      status: 'metadata',
+      progress: emptyProgress(),
+      destination: settings.downloadDirectory,
+      output: null,
+      details,
+      error: null,
+      attempt: 1,
+      createdAt: now,
+      updatedAt: now,
+      startedAt: now,
+      completedAt: null,
+      scheduledAt: null,
+      selection: null,
+      workspaceDirectory: null,
+    }
+
+    this.options.jobs.save(job)
+    this.emit(job)
+    this.options.logger.info('torrent_metadata_queued', {
+      jobId: job.id,
+      infoHash: parsed.infoHash.slice(0, 12),
+      hashVersion: parsed.version,
+    })
+    this.queueMetadataLookup(job)
+    return toJobView(job)
   }
 
   async createJob(request: CreateJobRequest): Promise<DownloadJob> {
@@ -233,6 +374,21 @@ export class DownloadManager {
   async cancelJob(jobId: string): Promise<DownloadJob> {
     const job = this.getOrThrow(jobId)
     if (isTerminal(job.status)) return toJobView(job)
+
+    if (job.status === 'metadata') {
+      this.lookupQueue = this.lookupQueue.filter((id) => id !== jobId)
+      this.lookupRuntimes.get(jobId)?.abort('cancel')
+      if (job.details?.engineId === 'torrent' && job.details.lookup) {
+        job.details.lookup = {
+          ...job.details.lookup,
+          phase: 'cancelled',
+          message: 'Metadata lookup cancelled.',
+        }
+      }
+      this.setTerminal(job, 'cancelled', null)
+      this.pumpLookupQueue()
+      return toJobView(job)
+    }
 
     if (job.status === 'setup') {
       this.setTerminal(job, 'cancelled', null)
@@ -420,6 +576,38 @@ export class DownloadManager {
     if (!isTerminal(job.status) || job.status === 'completed') {
       throw new DomainError('INVALID_REQUEST', 'Only failed or cancelled jobs can be retried.')
     }
+
+    if (
+      job.engineId === 'torrent' &&
+      job.source.kind === 'torrent' &&
+      job.source.sourceKind === 'infohash' &&
+      !job.selection
+    ) {
+      job.status = 'metadata'
+      job.progress = emptyProgress()
+      job.error = null
+      job.output = null
+      job.startedAt = new Date().toISOString()
+      job.completedAt = null
+      job.scheduledAt = null
+      job.attempt += 1
+      if (job.details?.engineId === 'torrent') {
+        job.details.lookup = {
+          phase: 'queued',
+          startedAt: job.startedAt,
+          elapsedMs: 0,
+          peers: 0,
+          dhtNodes: null,
+          message: 'Waiting to search the DHT…',
+        }
+      }
+      this.touch(job)
+      this.options.jobs.save(job)
+      this.emit(job)
+      this.queueMetadataLookup(job)
+      return toJobView(job)
+    }
+
     if (!job.selection) {
       throw new DomainError('INVALID_REQUEST', 'This job has no saved format selection.')
     }
@@ -442,13 +630,18 @@ export class DownloadManager {
 
   async removeJob(jobId: string): Promise<void> {
     const job = this.getOrThrow(jobId)
-    if (job.status !== 'setup' && !isTerminal(job.status)) {
+    if (job.status !== 'setup' && job.status !== 'metadata' && !isTerminal(job.status)) {
       throw new DomainError('INVALID_REQUEST', 'Cancel an active download before removing it.')
+    }
+
+    if (job.status === 'metadata') {
+      this.lookupQueue = this.lookupQueue.filter((id) => id !== jobId)
+      this.lookupRuntimes.get(jobId)?.abort('cancel')
     }
 
     const workspace = job.workspaceDirectory
     try {
-      if (job.status !== 'setup') {
+      if (job.status !== 'setup' && job.status !== 'metadata') {
         await this.options.registry.get(job.engineId).removeJob?.(toJobView(job))
       }
     } catch (error) {
@@ -476,6 +669,24 @@ export class DownloadManager {
     for (const job of this.options.jobs.list()) {
       if (isTerminal(job.status)) continue
       if (job.status === 'setup' || job.status === 'queued' || job.status === 'paused') continue
+
+      if (job.status === 'metadata') {
+        if (job.details?.engineId === 'torrent') {
+          job.details.lookup = {
+            phase: 'queued',
+            startedAt: now,
+            elapsedMs: 0,
+            peers: 0,
+            dhtNodes: null,
+            message: 'Resuming metadata lookup…',
+          }
+        }
+        job.error = null
+        this.touch(job)
+        this.options.jobs.save(job)
+        this.queueMetadataLookup(job)
+        continue
+      }
 
       if (job.status === 'seeding') {
         // Seeding never resumes automatically after a close.
@@ -542,6 +753,7 @@ export class DownloadManager {
       clearTimeout(this.scheduleTimer)
       this.scheduleTimer = null
     }
+    for (const controller of this.lookupRuntimes.values()) controller.abort('shutdown')
     const completions = [...this.runtimes.values()].map((runtime) => {
       runtime.controller.abort('shutdown')
       return runtime.completion
@@ -647,6 +859,189 @@ export class DownloadManager {
         this.runtimes.delete(job.id)
         this.pump()
       })
+  }
+
+  private queueMetadataLookup(job: PersistedJobRecord): void {
+    if (!this.options.torrentMetadata) return
+    if (this.lookupRuntimes.size < MAX_METADATA_LOOKUPS) {
+      this.beginMetadataLookup(job)
+      return
+    }
+    if (!this.lookupQueue.includes(job.id)) this.lookupQueue.push(job.id)
+  }
+
+  private pumpLookupQueue(): void {
+    if (this.shuttingDown) return
+    while (this.lookupRuntimes.size < MAX_METADATA_LOOKUPS && this.lookupQueue.length > 0) {
+      const jobId = this.lookupQueue.shift()
+      if (!jobId) break
+      const job = this.options.jobs.get(jobId)
+      if (!job || job.status !== 'metadata') continue
+      this.beginMetadataLookup(job)
+    }
+  }
+
+  private beginMetadataLookup(job: PersistedJobRecord): void {
+    if (job.status !== 'metadata' || this.lookupRuntimes.has(job.id)) return
+    const provider = this.options.torrentMetadata
+    if (!provider) return
+
+    if (job.details?.engineId === 'torrent' && job.details.lookup) {
+      job.details.lookup = {
+        ...job.details.lookup,
+        phase: 'searching',
+        startedAt: job.details.lookup.startedAt || new Date().toISOString(),
+        elapsedMs: 0,
+        peers: 0,
+        message: 'Searching the DHT for peers…',
+      }
+      this.touch(job)
+      this.options.jobs.save(job)
+      this.emit(job)
+    }
+
+    const controller = new AbortController()
+    this.lookupRuntimes.set(job.id, controller)
+    void this.runMetadataLookup(job, controller).finally(() => {
+      this.lookupRuntimes.delete(job.id)
+      this.pumpLookupQueue()
+    })
+  }
+
+  private async runMetadataLookup(
+    job: PersistedJobRecord,
+    controller: AbortController,
+  ): Promise<void> {
+    const provider = this.options.torrentMetadata
+    if (!provider) return
+
+    let timedOut = false
+    let lastPersistAt = 0
+    const timeout = setTimeout(() => {
+      timedOut = true
+      controller.abort('timeout')
+    }, METADATA_TIMEOUT_MS)
+    timeout.unref()
+
+    try {
+      if (job.details?.engineId !== 'torrent' || !job.details.lookup) {
+        throw new DomainError('INTERNAL_ERROR', 'The metadata lookup details are missing.')
+      }
+      const details = job.details
+
+      const result = await provider.resolve(
+        details.infoHash,
+        details.hashVersion,
+        controller.signal,
+        (progress) => {
+          if (this.shuttingDown || controller.signal.aborted) return
+          const current = this.options.jobs.get(job.id)
+          if (!current || current.status !== 'metadata') return
+          if (current.details?.engineId !== 'torrent') return
+
+          current.details.lookup = {
+            phase: 'searching',
+            startedAt: current.details.lookup?.startedAt ?? new Date().toISOString(),
+            elapsedMs: progress.elapsedMs,
+            peers: progress.peers,
+            dhtNodes: progress.dhtNodes,
+            message: progress.message,
+          }
+          current.details.discovery = {
+            ...current.details.discovery,
+            dhtNodes: progress.dhtNodes,
+          }
+          current.progress = {
+            ...current.progress,
+            bytesPerSecond: null,
+            etaSeconds: null,
+          }
+          this.touch(current)
+          this.emit(current)
+          if (Date.now() - lastPersistAt >= 5000) {
+            lastPersistAt = Date.now()
+            this.options.jobs.save(current)
+          }
+        },
+      )
+
+      if (this.shuttingDown || controller.signal.aborted) return
+      const current = this.options.jobs.get(job.id)
+      if (!current || current.status !== 'metadata') return
+
+      const selection = provider.createSelection(result.preview, result.metadataPath)
+      const settings = this.options.settings.get()
+      current.title = result.preview.title
+      current.source = {
+        kind: 'torrent',
+        infoHash: result.preview.infoHash,
+        hashVersion: result.preview.hashVersion,
+        sourceKind: 'infohash',
+        displayName: result.preview.title,
+      }
+      current.destination = defaultTorrentDestination(
+        settings.downloadDirectory,
+        torrentFolderName(result.preview.title, result.preview.files),
+      )
+      current.selection = selection
+      current.details = selection.details
+      current.status = 'setup'
+      current.progress = {
+        ...emptyProgress(),
+        totalBytes: result.preview.totalBytes,
+      }
+      current.error = null
+      current.completedAt = null
+      this.touch(current)
+      this.options.jobs.save(current)
+      this.emit(current)
+      this.options.logger.info('torrent_metadata_ready', {
+        jobId: current.id,
+        infoHash: result.preview.infoHash.slice(0, 12),
+        fileCount: result.preview.fileCount,
+      })
+    } catch (error) {
+      if (this.shuttingDown) return
+      const current = this.options.jobs.get(job.id)
+      if (!current || current.status !== 'metadata') return
+
+      const appError =
+        timedOut && controller.signal.reason === 'timeout'
+          ? {
+              code: 'TORRENT_NO_PEERS' as const,
+              message:
+                'No peers shared metadata for this info hash. Check the hash, or open the .torrent file instead.',
+              retryable: true,
+              diagnosticId: randomUUID(),
+            }
+          : toAppError(error)
+
+      current.status = 'failed'
+      current.completedAt = new Date().toISOString()
+      current.error = appError
+      if (current.details?.engineId === 'torrent' && current.details.lookup) {
+        current.details.lookup = {
+          ...current.details.lookup,
+          phase: 'failed',
+          message: appError.message,
+        }
+      }
+      current.progress = {
+        ...current.progress,
+        bytesPerSecond: null,
+        etaSeconds: null,
+      }
+      this.touch(current)
+      this.options.jobs.save(current)
+      this.emit(current)
+      this.options.logger.warn('torrent_metadata_failed', {
+        jobId: current.id,
+        code: appError.code,
+        diagnosticId: appError.diagnosticId,
+      })
+    } finally {
+      clearTimeout(timeout)
+    }
   }
 
   private async runJob(job: PersistedJobRecord, runtime: JobRuntime): Promise<void> {

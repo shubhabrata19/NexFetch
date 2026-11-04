@@ -28,6 +28,7 @@ function scheduledLabel(job: DownloadJob): string | null {
 
 const STATUS_LABELS: Record<JobStatus, string> = {
   setup: 'Setup',
+  metadata: 'Fetching metadata',
   queued: 'Queued',
   resolving: 'Preparing',
   downloading: 'Downloading',
@@ -50,7 +51,12 @@ function statusTone(status: JobStatus): string {
 }
 
 function isProgressStatus(status: JobStatus): boolean {
-  return status === 'downloading' || status === 'processing' || status === 'verifying'
+  return (
+    status === 'metadata' ||
+    status === 'downloading' ||
+    status === 'processing' ||
+    status === 'verifying'
+  )
 }
 
 function jobDetailLine(job: DownloadJob): string | null {
@@ -70,6 +76,13 @@ function jobDetailLine(job: DownloadJob): string | null {
   }
 
   if (job.details?.engineId === 'torrent') {
+    if (job.details.lookup) {
+      return [
+        `v${job.details.hashVersion}`,
+        `${job.details.lookup.peers ?? 0} peers`,
+        `${job.details.lookup.dhtNodes ?? '—'} DHT nodes`,
+      ].join(' · ')
+    }
     return [
       job.details.isPrivate ? 'Private' : 'Public',
       `Seeds ${job.details.seedsConnected ?? '—'} (${job.details.seedsAvailable ?? '—'})`,
@@ -192,6 +205,15 @@ function JobActions({
         />
       ) : null}
 
+      {job.status === 'metadata' ? (
+        <IconButton
+          icon="x"
+          label={`Cancel metadata lookup for ${job.title}`}
+          onClick={() => onCancel(job.id)}
+          tone="stop"
+        />
+      ) : null}
+
       {!terminal && job.status !== 'seeding' && !isTorrent ? (
         <IconButton
           icon="stop"
@@ -251,6 +273,20 @@ function CompactJobDetails({ job }: { job: DownloadJob }) {
       <div className="job-meta job-meta--compact">
         {state}
         {size ? <span className="job-size">{size}</span> : null}
+      </div>
+    )
+  }
+
+  if (job.status === 'metadata') {
+    const lookup = job.details?.engineId === 'torrent' ? job.details.lookup : undefined
+    return (
+      <div className="job-meta job-meta--compact">
+        {state}
+        <span className="job-size">
+          {lookup?.phase === 'queued'
+            ? 'Waiting for a lookup slot'
+            : `${lookup?.peers ?? 0} peers · ${lookup?.dhtNodes ?? '—'} DHT nodes`}
+        </span>
       </div>
     )
   }
@@ -472,6 +508,12 @@ export function JobRow({
                   size ? (
                     <span>{size}</span>
                   ) : null
+                ) : job.status === 'metadata' ? (
+                  <span>
+                    {job.details?.engineId === 'torrent' && job.details.lookup
+                      ? `${job.details.lookup.message} · ${job.details.lookup.peers ?? 0} peers`
+                      : 'Searching the DHT for metadata…'}
+                  </span>
                 ) : job.status === 'queued' ? (
                   <span>{scheduled ? `Scheduled ${scheduled}` : 'Waiting for a slot'}</span>
                 ) : job.status === 'resolving' ? (

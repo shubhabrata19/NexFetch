@@ -175,11 +175,12 @@ brand asset from `resources/assets`.
 - The downloads workspace has YouTube, Direct file, and Torrent tabs. All keep
   the input, preview, pinned action, and activity queue visible together.
 - Torrent intake accepts a dropped or chosen `.torrent` file, or a v1/v2 info
-  hash. Successful input redirects to the dedicated Torrents page in Setup mode.
-- The Torrents page is a master–detail client with Setup, Downloading, Seeding,
-  and Completed groups; files, peers, trackers, and discovery tabs; seeds/peers
-  connected-versus-available counts; live download/upload speed; per-torrent
-  limits; and explicit stop-seeding controls.
+  hash. Info-hash lookups create a visible Torrents entry immediately, continue
+  across screen changes, and become Setup only after metadata is found.
+- The Torrents page is a master–detail client with Preparing, Setup,
+  Downloading, Seeding, and Completed groups; files, peers, trackers, and
+  discovery tabs; seeds/peers connected-versus-available counts; live
+  download/upload speed; per-torrent limits; and explicit stop-seeding controls.
 - Closing the window while transfers are active offers Continue in Background
   (tray) or Close NexFetch. Unfinished downloads resume next launch; seeding
   stops and does not resume automatically.
@@ -197,6 +198,9 @@ brand asset from `resources/assets`.
 - Clearing a completed job shows an inline warning inside the card, then uses
   check/cancel icon actions. Confirming fades the card out before removing the
   history entry. Downloaded files remain on disk.
+- Text fields use a native right-click menu with Undo, Redo, Cut, Copy, Paste,
+  Delete, and Select All. The torrent hash Paste button reads the clipboard
+  through the main process rather than browser clipboard permissions.
 - The theme follows the operating system by default. The sidebar footer toggles
   between explicit light and dark themes; Settings still offers System, Light,
   and Dark directly.

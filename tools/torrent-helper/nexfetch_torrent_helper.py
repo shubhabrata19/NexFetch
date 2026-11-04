@@ -35,6 +35,15 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
+# Windows defaults to the active code page for pipes, which turns non-ASCII
+# progress messages into replacement characters. The Electron side reads UTF-8.
+if hasattr(sys.stdin, "reconfigure"):
+    sys.stdin.reconfigure(encoding="utf-8")
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
+
 try:
     import libtorrent as lt
 except Exception as exc:  # pragma: no cover - surfaced to the desktop app
@@ -1105,18 +1114,26 @@ class Session:
                         dht_nodes = int(session_status.dht_nodes)
                     except Exception:
                         dht_nodes = None
+                    peers = int(st.num_peers)
+                    if elapsed > 15 and dht_nodes is not None and dht_nodes <= 0:
+                        message = (
+                            "No DHT nodes yet. Check your connection, "
+                            "or open the .torrent file instead."
+                        )
+                    elif peers > 0:
+                        message = "Peers found — requesting metadata…"
+                    elif dht_nodes is not None and dht_nodes <= 0:
+                        message = "Contacting the DHT…"
+                    else:
+                        message = "Searching the DHT for peers…"
                     emit_event(
                         "resolve.progress",
                         {
                             "requestId": request_id,
                             "dhtNodes": dht_nodes,
-                            "peers": int(st.num_peers),
+                            "peers": peers,
                             "elapsedMs": int(elapsed * 1000),
-                            "message": (
-                                "Searching DHT for peers…"
-                                if dht_nodes is not None and dht_nodes <= 0
-                                else "Finding peers for this info hash…"
-                            ),
+                            "message": message,
                         },
                     )
 

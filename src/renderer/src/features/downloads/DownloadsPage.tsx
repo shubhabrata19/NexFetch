@@ -16,9 +16,11 @@ interface DownloadsPageProps {
   engines: EngineInfo[]
   jobs: DownloadJob[]
   source: SourceTab
+  lastTorrentLookupId: string | null
   onSourceChange: (source: SourceTab) => void
   onCreateJob: (request: CreateJobRequest) => Promise<DownloadJob | null>
   onCreateTorrent: (request: CreateJobRequest) => Promise<DownloadJob | null>
+  onLookupTorrent: (infoHash: string) => Promise<DownloadJob | null>
   onOpenTorrent: (jobId: string) => void
   onCancelJob: (jobId: string) => void
   onPauseJob: (jobId: string) => void
@@ -40,9 +42,11 @@ export function DownloadsPage({
   engines,
   jobs,
   source,
+  lastTorrentLookupId,
   onSourceChange,
   onCreateJob,
   onCreateTorrent,
+  onLookupTorrent,
   onOpenTorrent,
   onCancelJob,
   onPauseJob,
@@ -117,8 +121,12 @@ export function DownloadsPage({
               settings={settings}
               dependencies={dependencies}
               jobs={jobs}
+              lastLookupJobId={lastTorrentLookupId}
               onCreateTorrent={onCreateTorrent}
+              onLookupTorrent={onLookupTorrent}
               onOpenTorrent={onOpenTorrent}
+              onCancelJob={onCancelJob}
+              onRetryJob={onRetryJob}
             />
           )}
         </div>

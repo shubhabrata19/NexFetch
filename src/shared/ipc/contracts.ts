@@ -65,11 +65,6 @@ export interface CreateJobRequest {
   deferStart?: boolean
 }
 
-export interface TorrentPreviewRequest {
-  requestId: string
-  infoHash: string
-}
-
 export interface TorrentBytesPreviewRequest {
   requestId: string
   name: string
@@ -84,14 +79,6 @@ export interface TorrentLimitsRequest {
   jobId: string
   downloadLimitBytesPerSecond: number | null
   uploadLimitBytesPerSecond: number | null
-}
-
-export interface TorrentPreviewProgressEvent {
-  requestId: string
-  dhtNodes: number | null
-  peers: number | null
-  elapsedMs: number
-  message: string
 }
 
 export interface YoutubePreviewRequest {

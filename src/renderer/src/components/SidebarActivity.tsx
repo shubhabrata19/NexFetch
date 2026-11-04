@@ -16,9 +16,10 @@ const STATUS_PRIORITY: Record<string, number> = {
   downloading: 0,
   processing: 1,
   verifying: 2,
-  resolving: 3,
-  queued: 4,
-  cancelling: 5,
+  metadata: 3,
+  resolving: 4,
+  queued: 5,
+  cancelling: 6,
 }
 
 function activeJobs(jobs: DownloadJob[]): DownloadJob[] {
@@ -72,6 +73,7 @@ export function SidebarActivity({
           const percent = job.progress.percent
           const isTorrent = job.engineId === 'torrent'
           const canPauseResume = pausableEngineIds.has(job.engineId)
+          const isMetadata = job.status === 'metadata'
           return (
             <div className="sidebar-job" key={job.id}>
               <div className="sidebar-job-thumb">
@@ -91,7 +93,13 @@ export function SidebarActivity({
                   {job.title}
                 </div>
                 <div className="sidebar-job-meta">
-                  <span>{percent === null ? 'In progress' : `${Math.round(percent)}%`}</span>
+                  <span>
+                    {isMetadata
+                      ? 'Fetching metadata'
+                      : percent === null
+                        ? 'In progress'
+                        : `${Math.round(percent)}%`}
+                  </span>
                   {job.progress.bytesPerSecond !== null ? (
                     <span>{formatSpeed(job.progress.bytesPerSecond)}</span>
                   ) : null}
@@ -110,7 +118,7 @@ export function SidebarActivity({
                   />
                 </div>
               </div>
-              {isTorrent && canPauseResume ? (
+              {isTorrent && canPauseResume && !isMetadata ? (
                 job.status === 'paused' ? (
                   <button
                     type="button"

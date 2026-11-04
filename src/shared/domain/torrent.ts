@@ -98,6 +98,17 @@ export interface TorrentSetupUpdate {
   seedAfterComplete: boolean
 }
 
+export type TorrentMetadataPhase = 'queued' | 'searching' | 'failed' | 'cancelled'
+
+export interface TorrentMetadataLookup {
+  phase: TorrentMetadataPhase
+  startedAt: string
+  elapsedMs: number
+  peers: number | null
+  dhtNodes: number | null
+  message: string
+}
+
 export interface TorrentJobDetails {
   engineId: 'torrent'
   infoHash: string
@@ -118,6 +129,8 @@ export interface TorrentJobDetails {
   uploadLimitBytesPerSecond: number | null
   seedAfterComplete: boolean
   discovery: TorrentDiscovery
+  /** Present only while metadata is being fetched for an info hash. */
+  lookup?: TorrentMetadataLookup
 }
 
 export interface TorrentResolveProgress {

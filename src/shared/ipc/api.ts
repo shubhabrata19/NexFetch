@@ -12,7 +12,6 @@ import type {
   SourcePreviewEnvelope,
   TorrentPreviewEnvelope,
   TorrentLimitsRequest,
-  TorrentPreviewProgressEvent,
   TorrentSetupUpdateRequest,
   YoutubePreviewEnvelope,
 } from './contracts'
@@ -30,6 +29,7 @@ export interface NexFetchApi {
   }
   system: {
     chooseDirectory(): Promise<Result<string | null>>
+    readClipboardText(): Promise<Result<string>>
     openDestination(): Promise<Result<null>>
     openLogs(): Promise<Result<null>>
   }
@@ -57,9 +57,8 @@ export interface NexFetchApi {
       name: string,
       dataBase64: string,
     ): Promise<Result<TorrentPreviewEnvelope>>
-    previewInfoHash(requestId: string, infoHash: string): Promise<Result<TorrentPreviewEnvelope>>
+    lookup(infoHash: string): Promise<Result<DownloadJob>>
     cancelPreview(requestId: string): Promise<Result<null>>
-    onPreviewProgress(listener: (event: TorrentPreviewProgressEvent) => void): Unsubscribe
   }
   jobs: {
     create(request: CreateJobRequest): Promise<Result<DownloadJob>>
