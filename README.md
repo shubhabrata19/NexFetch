@@ -50,12 +50,12 @@ choose, and nothing leaves your machine — **no telemetry, no accounts, no clou
 
 [**Download the latest release →**](https://github.com/shubhabrata19/NexFetch/releases/latest)
 
-1. Open the latest release and download `NexFetch Setup <version>.exe` plus
+1. Open the latest release and download `NexFetch-Setup-<version>-x64.exe` plus
    `SHA256SUMS.txt`.
 2. Verify the installer (PowerShell):
 
    ```powershell
-   certutil -hashfile "NexFetch Setup <version>.exe" SHA256
+   certutil -hashfile "NexFetch-Setup-<version>-x64.exe" SHA256
    ```
 
    The result must match the line in `SHA256SUMS.txt`. If it does not, do not run

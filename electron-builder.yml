@@ -22,6 +22,7 @@ asar: true
 npmRebuild: false
 win:
   icon: build/icon.ico
+  artifactName: 'NexFetch-Setup-${version}-${arch}.${ext}'
   target:
     - target: nsis
       arch:

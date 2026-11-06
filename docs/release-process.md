@@ -91,8 +91,8 @@ npx electron-builder --win nsis --config.directories.output=release/v0.6.0
 Expected files:
 
 ```text
-release/v0.6.0/NexFetch Setup 0.6.0.exe
-release/v0.6.0/NexFetch Setup 0.6.0.exe.blockmap   (may exist)
+release/v0.6.0/NexFetch-Setup-0.6.0-x64.exe
+release/v0.6.0/NexFetch-Setup-0.6.0-x64.exe.blockmap   (may exist)
 release/v0.6.0/win-unpacked/NexFetch.exe
 ```
 
@@ -136,7 +136,7 @@ files. Verify one hash manually:
 
 ```powershell
 Get-Content .\release\v0.6.0\SHA256SUMS.txt
-certutil -hashfile ".\release\v0.6.0\NexFetch Setup 0.6.0.exe" SHA256
+certutil -hashfile ".\release\v0.6.0\NexFetch-Setup-0.6.0-x64.exe" SHA256
 ```
 
 Never publish the installer without the checksum file.
@@ -161,7 +161,7 @@ the GitHub release. Confirm CI and CodeQL are green for the release commit.
 The tag workflow publishes automatically:
 
 - Title: `v0.6.0 (unsigned preview)`
-- Assets: `NexFetch Setup 0.6.0.exe`, its `.blockmap`, and `SHA256SUMS.txt`
+- Assets: `NexFetch-Setup-0.6.0-x64.exe`, its `.blockmap`, and `SHA256SUMS.txt`
 - Marked **Latest** (not a pre-release) so `releases/latest` and the README
   download button resolve
 - Unsigned warning included in the notes
@@ -177,7 +177,7 @@ warning. Do not treat it as a stable release; use it for testing only.
 
 Verify your download before running:
 
-    certutil -hashfile "NexFetch Setup 0.6.0.exe" SHA256
+    certutil -hashfile "NexFetch-Setup-0.6.0-x64.exe" SHA256
 
 Compare the result with SHA256SUMS.txt attached to this release. A checksum
 mismatch means the file is not the published build — do not run it.
@@ -189,8 +189,8 @@ Optional CLI equivalent (drop the `.blockmap` argument if that file was not prod
 
 ```powershell
 gh release create v0.6.0 `
-  "release/v0.6.0/NexFetch Setup 0.6.0.exe" `
-  "release/v0.6.0/NexFetch Setup 0.6.0.exe.blockmap" `
+  "release/v0.6.0/NexFetch-Setup-0.6.0-x64.exe" `
+  "release/v0.6.0/NexFetch-Setup-0.6.0-x64.exe.blockmap" `
   "release/v0.6.0/SHA256SUMS.txt" `
   --title "v0.6.0 (unsigned preview)" `
   --notes-file release-notes.md `

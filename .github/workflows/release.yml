@@ -78,6 +78,12 @@ jobs:
           $version = $env:VERSION
           $tag = $env:GITHUB_REF_NAME
           $releaseDir = "release/v$version"
+          $installer = "NexFetch-Setup-$version-x64.exe"
+          foreach ($asset in @($installer, "$installer.blockmap", "SHA256SUMS.txt")) {
+            if (-not (Test-Path "$releaseDir/$asset")) {
+              throw "Expected release asset is missing: $releaseDir/$asset"
+            }
+          }
           $notes = @"
           ## Unsigned preview build
 
@@ -86,7 +92,7 @@ jobs:
 
           Verify your download before running:
 
-              certutil -hashfile "NexFetch Setup $version.exe" SHA256
+              certutil -hashfile "$installer" SHA256
 
           Compare the result with SHA256SUMS.txt attached to this release. A checksum
           mismatch means the file is not the published build. Do not run it.
@@ -95,8 +101,8 @@ jobs:
           "@
 
           gh release create $tag `
-            "$releaseDir/NexFetch Setup $version.exe" `
-            "$releaseDir/NexFetch Setup $version.exe.blockmap" `
+            "$releaseDir/$installer" `
+            "$releaseDir/$installer.blockmap" `
             "$releaseDir/SHA256SUMS.txt" `
             --title "$tag (unsigned preview)" `
             --notes $notes `
