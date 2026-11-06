@@ -36,7 +36,19 @@ New-Item -ItemType Directory -Force -Path $tempRoot | Out-Null
 
 function Get-Sha256 {
   param([string]$Path)
-  return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+  # Use .NET directly: Get-FileHash is not available in every CI PowerShell.
+  $stream = [System.IO.File]::OpenRead($Path)
+  try {
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+      $bytes = $sha.ComputeHash($stream)
+      return ([System.BitConverter]::ToString($bytes) -replace '-', '').ToLowerInvariant()
+    } finally {
+      $sha.Dispose()
+    }
+  } finally {
+    $stream.Dispose()
+  }
 }
 
 function Test-Sha256 {
@@ -143,7 +155,8 @@ foreach ($archiveName in $archiveGroups.Keys) {
     Remove-Item -LiteralPath $extractPath -Recurse -Force
   }
   Write-Host "Extracting $archiveName..."
-  Expand-Archive -LiteralPath $archivePath -DestinationPath $extractPath -Force
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  [System.IO.Compression.ZipFile]::ExtractToDirectory($archivePath, $extractPath)
 
   foreach ($member in $group.Members) {
     $memberPath = Join-Path $extractPath (([string]$member.Artifact.archive.member) -replace '/', '\')
