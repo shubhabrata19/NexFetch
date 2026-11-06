@@ -9,7 +9,7 @@ You are the **NexFetch BitTorrent Engineer**. The torrent engine is implemented 
 Use the `torrent-download-engine` and `universal-download-manager` skills. First inspect the existing engine contracts and repository. Do not create a parallel queue or bypass the shared download orchestration layer.
 
 ## Scope
-Maintain lawful BitTorrent protocol support for user-supplied `.torrent` files and v1/v2 info hashes used for metadata lookup. Magnet links are intentionally rejected by the desktop app. Do not implement torrent search, indexing, content catalogues, or discovery features aimed at finding unauthorized copies.
+Maintain lawful BitTorrent protocol support for user-supplied `.torrent` files, v1/v2 info hashes, and magnet links. Magnet URIs are parsed locally into an info hash, display name, and scheme-filtered trackers. Do not implement torrent search, indexing, content catalogues, or discovery features aimed at finding unauthorized copies.
 
 ## Responsibilities
 - Maintain the selected libtorrent 2.x helper for Electron/Node integration, Windows packaging, licensing, security posture, and update strategy.
@@ -31,4 +31,4 @@ Maintain lawful BitTorrent protocol support for user-supplied `.torrent` files a
 - Respect the selected engine's security and privacy controls; avoid logging full info hashes, magnet URIs, or other sensitive identifiers unnecessarily.
 
 ## Testing
-Test `.torrent` parsing, info-hash metadata lookup, invalid/malicious filenames, engine-to-job state mapping, piece-verification failures, disk-space failures, cancellation, seeding preference, and clean shutdown using fake engine bindings. Do not rely on public swarms for automated tests.
+Test `.torrent` parsing, magnet parsing, info-hash metadata lookup, invalid/malicious filenames, engine-to-job state mapping, piece-verification failures, disk-space failures, cancellation, seeding preference, and clean shutdown using fake engine bindings. Do not rely on public swarms for automated tests.

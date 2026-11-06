@@ -39,7 +39,7 @@ Maintain the YouTube, HTTP/HTTPS, and BitTorrent adapters while keeping the core
 
 ## Implemented adapters and maintenance
 - **HTTP/HTTPS:** direct file transfers, HEAD-first probes with GET range fallback, bounded and revalidated redirects, Range-based resume with validator checks, unknown content length, HTML rejection, optional SHA-256 verification, and disk-space checks.
-- **BitTorrent:** `.torrent` files and v1/v2 info hashes, metadata-only DHT lookup, tracker validation, metadata sanitization with identity preservation, file selection, peer/seed statistics, per-torrent limits, and explicit user-controlled seeding. Magnet links are intentionally not accepted.
+- **BitTorrent:** `.torrent` files, v1/v2 info hashes, and magnet links (parsed locally into a hash plus sanitized trackers); metadata-only DHT/tracker lookup, tracker validation, metadata sanitization with identity preservation, file selection, peer/seed statistics, per-torrent limits, and explicit user-controlled seeding.
 - The BitTorrent adapter runs through a separate libtorrent helper process using a narrow JSON-lines protocol; it must remain spawned by the main process and must never expose a local web API.
 - Future adapters must map into the same queue/job lifecycle without pretending every capability exists on every engine.
 

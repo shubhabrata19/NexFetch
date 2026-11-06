@@ -91,10 +91,18 @@ export class TorrentPreviewService {
       elapsedMs: number
       message: string
     }) => void,
+    options?: { trackers?: string[]; sourceKind?: 'infohash' | 'magnet' },
   ): Promise<{ preview: TorrentPreview; metadataPath: string }> {
     await mkdir(this.cacheDirectory, { recursive: true })
     const metadataPath = join(this.cacheDirectory, `${infoHash}.torrent`)
-    return this.engine.resolveInfoHash(infoHash, hashVersion, metadataPath, signal, onProgress)
+    return this.engine.resolveInfoHash(
+      infoHash,
+      hashVersion,
+      metadataPath,
+      signal,
+      onProgress,
+      options,
+    )
   }
 
   private async storePreview(

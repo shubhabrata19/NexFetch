@@ -121,6 +121,7 @@ export class TorrentHelperClient {
     metadataPath: string,
     signal: AbortSignal,
     onProgress?: (progress: HelperResolveProgress) => void,
+    options?: { trackers?: string[]; sourceKind?: 'infohash' | 'magnet' },
   ): Promise<{ preview: HelperPreview; metadataPath: string }> {
     await this.ensureStarted()
     if (signal.aborted) throw new TorrentHelperError('CANCELLED', 'Torrent lookup cancelled.')
@@ -158,6 +159,8 @@ export class TorrentHelperClient {
           hashVersion,
           metadataPath,
           timeoutSeconds: 180,
+          trackers: options?.trackers ?? [],
+          sourceKind: options?.sourceKind ?? 'infohash',
         },
         15_000,
       ).catch((error: unknown) => {

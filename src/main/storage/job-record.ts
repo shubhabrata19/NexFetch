@@ -98,5 +98,10 @@ export function normalizePersistedJobRecord(value: unknown): PersistedJobRecord 
     selection: isObject(value.selection) ? (value.selection as unknown as EngineSelection) : null,
     workspaceDirectory:
       typeof value.workspaceDirectory === 'string' ? value.workspaceDirectory : null,
+    lookupTrackers: Array.isArray(value.lookupTrackers)
+      ? value.lookupTrackers
+          .filter((entry): entry is string => typeof entry === 'string')
+          .slice(0, 20)
+      : null,
   }
 }

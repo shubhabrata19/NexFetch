@@ -496,7 +496,7 @@ export function SettingsPage({
           </p>
           <p className="card-footnote">
             YouTube, HTTP, and BitTorrent are independent engines behind one queue. Torrent metadata
-            is parsed locally; magnets are intentionally not accepted.
+            and magnet links are parsed locally.
           </p>
         </section>
       </div>

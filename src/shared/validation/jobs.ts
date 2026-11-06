@@ -66,11 +66,9 @@ export const torrentSetupUpdateSchema = z
   })
   .strict()
 
-export const torrentInfoHashSchema = z.string().trim().min(32).max(80)
-
 export const torrentLookupRequestSchema = z
   .object({
-    infoHash: torrentInfoHashSchema,
+    source: z.string().trim().min(1).max(8192),
   })
   .strict()
 

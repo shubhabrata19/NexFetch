@@ -18,7 +18,7 @@ import type {
   TorrentPreview,
   TorrentResolvedSelection,
 } from '@shared/domain/torrent'
-import { parseTorrentInfoHash } from '@shared/domain/torrent-hash'
+import { parseTorrentSource } from '@shared/domain/torrent-magnet'
 import { sanitizeFilenameBase } from '@shared/security/filename'
 import { torrentSelectionSchema, torrentSetupUpdateSchema } from '@shared/validation/jobs'
 import type { SettingsService } from '../../services/settings-service'
@@ -175,7 +175,7 @@ export class TorrentEngine implements DownloadEngine {
       }
     }
 
-    const parsed = parseTorrentInfoHash(input.value)
+    const parsed = parseTorrentSource(input.value)
     if (!parsed) return null
     return {
       kind: 'supported',
@@ -183,8 +183,8 @@ export class TorrentEngine implements DownloadEngine {
         kind: 'torrent',
         infoHash: parsed.infoHash,
         hashVersion: parsed.version,
-        sourceKind: 'infohash',
-        displayName: `${parsed.infoHash.slice(0, 12)}…`,
+        sourceKind: parsed.kind === 'magnet' ? 'magnet' : 'infohash',
+        displayName: parsed.displayName ?? `${parsed.infoHash.slice(0, 12)}…`,
       },
       priority: 30,
     }
@@ -210,6 +210,7 @@ export class TorrentEngine implements DownloadEngine {
       elapsedMs: number
       message: string
     }) => void,
+    options?: { trackers?: string[]; sourceKind?: 'infohash' | 'magnet' },
   ): Promise<{ preview: TorrentPreview; metadataPath: string }> {
     try {
       await this.helper.configure(this.settings.get())
@@ -219,6 +220,7 @@ export class TorrentEngine implements DownloadEngine {
         metadataPath,
         signal,
         onProgress,
+        options,
       )
       return { preview: result.preview, metadataPath: result.metadataPath }
     } catch (error) {

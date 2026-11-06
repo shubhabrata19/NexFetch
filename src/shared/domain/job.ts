@@ -21,7 +21,7 @@ export type TorrentDownloadSource = {
   kind: 'torrent'
   infoHash: string
   hashVersion: 1 | 2
-  sourceKind: 'file' | 'infohash'
+  sourceKind: 'file' | 'infohash' | 'magnet'
   displayName: string
 }
 

@@ -9,7 +9,7 @@ compatibility: opencode
 Use this skill when maintaining or extending the implemented BitTorrent engine. Keep changes behind the shared engine contract and preserve the security boundaries around the libtorrent helper process.
 
 ## Supported user flow
-- User selects a local `.torrent` file or supplies a v1/v2 info hash for DHT metadata lookup. Magnet links are intentionally rejected by the desktop app.
+- User selects a local `.torrent` file, supplies a v1/v2 info hash, or pastes a magnet link. Magnet URIs are parsed locally into the hash, display name, and scheme-filtered trackers.
 - App validates and resolves torrent metadata.
 - User reviews the content/file list and selects a destination and files where supported.
 - User starts the transfer and sees downloading/verification state and available peer/seed metrics.
@@ -21,7 +21,7 @@ The current implementation uses a dedicated libtorrent 2.x helper process. Maint
 - Native binary distribution, PyInstaller packaging, and code-signing strategy.
 - License compatibility and redistribution obligations.
 - Security history, maintenance cadence, and update process.
-- Support for `.torrent` files, info-hash metadata, piece verification, cancellation, and seeding controls.
+- Support for `.torrent` files, magnet parsing, info-hash metadata, piece verification, cancellation, and seeding controls.
 
 Keep the library behind a dedicated adapter implementing NexFetch's common engine contract.
 

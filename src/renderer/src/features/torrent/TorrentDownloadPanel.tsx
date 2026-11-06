@@ -6,7 +6,8 @@ import type {
   Settings,
   TorrentPreviewEnvelope,
 } from '@shared/ipc/contracts'
-import { parseTorrentInfoHash } from '@shared/domain/torrent-hash'
+import { parseTorrentSource } from '@shared/domain/torrent-magnet'
+import type { ParsedTorrentSource } from '@shared/domain/torrent-magnet'
 import { Icon } from '../../components/Icon'
 import { defaultTorrentDestination, torrentFolderName } from '../../lib/paths'
 import { formatBytes } from '../../lib/format'
@@ -17,7 +18,7 @@ interface TorrentDownloadPanelProps {
   jobs: DownloadJob[]
   lastLookupJobId: string | null
   onCreateTorrent: (request: CreateJobRequest) => Promise<DownloadJob | null>
-  onLookupTorrent: (infoHash: string) => Promise<DownloadJob | null>
+  onLookupTorrent: (source: string) => Promise<DownloadJob | null>
   onOpenTorrent: (jobId: string) => void
   onCancelJob: (jobId: string) => void
   onRetryJob: (jobId: string) => void
@@ -53,6 +54,11 @@ function hashFormatLabel(value: string, version: 1 | 2): string {
     : 'v1 · 40 hex'
 }
 
+function sourceFormatLabel(value: string, parsed: ParsedTorrentSource): string {
+  if (parsed.kind === 'magnet') return `v${parsed.version} · magnet link`
+  return hashFormatLabel(value, parsed.version)
+}
+
 function metadataFailureTitle(job: DownloadJob): string {
   if (job.error?.code === 'TORRENT_UNAVAILABLE') return 'Torrent engine unavailable'
   if (job.error?.code === 'TORRENT_INVALID') return 'Lookup failed'
@@ -70,7 +76,7 @@ export function TorrentDownloadPanel({
   onCancelJob,
   onRetryJob,
 }: TorrentDownloadPanelProps) {
-  const [infoHash, setInfoHash] = useState('')
+  const [source, setSource] = useState('')
   const [touched, setTouched] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -81,7 +87,7 @@ export function TorrentDownloadPanel({
   const requestIdRef = useRef<string | null>(null)
   const preparingStartedAt = useRef(0)
 
-  const parsedHash = parseTorrentInfoHash(infoHash)
+  const parsedSource = parseTorrentSource(source)
   const helperMissing = torrentHelperMissing(dependencies)
   const lastLookup = jobs.find((job) => job.id === lastLookupJobId) ?? null
   const lookupDetails = lastLookup?.details?.engineId === 'torrent' ? lastLookup.details : null
@@ -205,7 +211,7 @@ export function TorrentDownloadPanel({
     setError(null)
     setNotice(null)
     setTouched(true)
-    if (!parsedHash) {
+    if (!parsedSource) {
       setError(null)
       return
     }
@@ -213,7 +219,7 @@ export function TorrentDownloadPanel({
     const existing = jobs.find(
       (job) =>
         job.details?.engineId === 'torrent' &&
-        job.details.infoHash === parsedHash.infoHash &&
+        job.details.infoHash === parsedSource.infoHash &&
         job.status !== 'failed' &&
         job.status !== 'cancelled',
     )
@@ -225,9 +231,9 @@ export function TorrentDownloadPanel({
 
     setStartingLookup(true)
     try {
-      const job = await onLookupTorrent(parsedHash.infoHash)
+      const job = await onLookupTorrent(source.trim())
       if (job) {
-        setInfoHash('')
+        setSource('')
         setTouched(false)
       }
     } finally {
@@ -242,23 +248,17 @@ export function TorrentDownloadPanel({
       setError(result.error.message)
       return
     }
-    const value = result.data.trim()
-    if (/^magnet:/i.test(value)) {
-      setError('Magnet links are not supported. Paste the info hash instead.')
-      return
-    }
-    setInfoHash(value)
+    setSource(result.data.trim())
     setTouched(true)
   }
 
   const validationMessage =
-    touched && infoHash.trim().length > 0 && !parsedHash
-      ? /^magnet:/i.test(infoHash.trim())
-        ? 'Magnet links are not supported. Paste the info hash instead.'
-        : 'Enter a valid v1 (40 hex / 32 base32) or v2 (64 hex) info hash.'
+    touched && source.trim().length > 0 && !parsedSource
+      ? 'Enter a valid v1/v2 info hash or magnet link.'
       : null
-  const formatLabel = parsedHash ? hashFormatLabel(infoHash, parsedHash.version) : null
-  const canLookup = parsedHash !== null && !startingLookup && !helperMissing
+  const formatLabel = parsedSource ? sourceFormatLabel(source, parsedSource) : null
+  const displayName = parsedSource?.displayName ?? null
+  const canLookup = parsedSource !== null && !startingLookup && !helperMissing
   const lookupPhase = lookup?.phase
 
   return (
@@ -298,15 +298,15 @@ export function TorrentDownloadPanel({
 
         <section className="torrent-hash-section" aria-labelledby="torrent-hash-label">
           <div className="torrent-section-heading">
-            <h3 id="torrent-hash-label">Add by info hash</h3>
-            <span>Public torrents only</span>
+            <h3 id="torrent-hash-label">Add by info hash or magnet link</h3>
+            <span>Hashes or magnets</span>
           </div>
 
           <div
             className={`torrent-hash-box${validationMessage ? ' torrent-hash-box--invalid' : ''}`}
           >
             <label className="sr-only" htmlFor="torrent-info-hash">
-              Torrent info hash
+              Torrent info hash or magnet link
             </label>
             <input
               id="torrent-info-hash"
@@ -314,13 +314,13 @@ export function TorrentDownloadPanel({
               type="text"
               spellCheck={false}
               autoComplete="off"
-              placeholder="Paste a v1 or v2 info hash"
-              value={infoHash}
+              placeholder="Paste an info hash or magnet link"
+              value={source}
               disabled={helperMissing}
               aria-invalid={validationMessage ? true : undefined}
               aria-describedby="torrent-hash-help"
               onChange={(event) => {
-                setInfoHash(event.target.value)
+                setSource(event.target.value)
                 setTouched(true)
                 if (error) setError(null)
               }}
@@ -361,8 +361,8 @@ export function TorrentDownloadPanel({
           >
             {validationMessage ??
               (formatLabel
-                ? `✓ Valid ${formatLabel}`
-                : 'v1: 40 hex or 32 base32 · v2: 64 hex · Private torrents need a .torrent file')}
+                ? `✓ Valid ${formatLabel}${displayName ? ` · ${displayName}` : ''}`
+                : 'v1: 40 hex or 32 base32 · v2: 64 hex · or a magnet link')}
           </p>
 
           {showLookupStatus && lastLookup ? (
@@ -514,9 +514,7 @@ export function TorrentDownloadPanel({
           </div>
         </div>
 
-        <p className="quality-note">
-          Only download and share content you have the rights to. Magnet links are not supported.
-        </p>
+        <p className="quality-note">Only download and share content you have the rights to.</p>
       </div>
     </section>
   )

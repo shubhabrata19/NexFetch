@@ -31,8 +31,9 @@ behind one queue, one history, and one persistence layer.
 
 ## BitTorrent
 
-- `.torrent` files and v1/v2 info hashes (DHT metadata lookup). Magnet links are
-  intentionally not accepted.
+- `.torrent` files, v1/v2 info hashes, and magnet links. Magnet URIs are parsed
+  locally; only the info hash and scheme-filtered trackers reach the torrent
+  helper.
 - A separate libtorrent 2.x helper process speaking JSON-lines over stdio — no
   local web API, no remote access.
 - Metadata-only lookups (`default_dont_download`) so a lookup never allocates or
@@ -77,7 +78,9 @@ behind one queue, one history, and one persistence layer.
 - No playlists, channels, live streams, cookies, credentials, authenticated
   downloads, proxy configuration, DRM circumvention, paywall/geo bypass, or
   torrent search/indexing.
-- Magnet links are not accepted.
+- Magnet links are parsed locally. Display names are sanitized and never used as
+  filesystem paths; embedded trackers are scheme-filtered and then rejected by
+  the helper if they resolve to private or local hosts.
 - No telemetry; logs stay local with sensitive keys redacted.
 - Builds are currently unsigned previews (see
   [the release process](release-process.md)).

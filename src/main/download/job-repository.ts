@@ -9,6 +9,8 @@ import { JsonFileStore } from '../services/json-file-store'
 export interface PersistedJobRecord extends DownloadJob {
   selection: EngineSelection | null
   workspaceDirectory: string | null
+  /** Magnet trackers used for metadata resolution only; never sent to the UI. */
+  lookupTrackers?: string[] | null
 }
 
 export interface JobRepository {
@@ -19,9 +21,10 @@ export interface JobRepository {
 }
 
 export function toJobView(job: PersistedJobRecord): DownloadJob {
-  const { selection, workspaceDirectory, ...view } = job
+  const { selection, workspaceDirectory, lookupTrackers, ...view } = job
   void selection
   void workspaceDirectory
+  void lookupTrackers
   return view
 }
 

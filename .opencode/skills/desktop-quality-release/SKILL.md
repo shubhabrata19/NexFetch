@@ -38,7 +38,7 @@ Inspect scripts, test framework, architecture, supported OS targets, and existin
 Range/resume support detection, redirects, unknown content length, server errors, filename collisions, cancellation, checksums when used, and safe path handling.
 
 ## BitTorrent adapter tests
-`.torrent` validation, info-hash metadata resolution, malicious filenames, path containment, piece verification, disk-space errors, duplicate jobs, peer/stat reporting, explicit seeding policy, per-torrent limits, cancellation, and shutdown. Magnet links are intentionally rejected. Use fake engine bindings, not public swarms.
+`.torrent` validation, magnet parsing (hash, display name, trackers), info-hash metadata resolution, malicious filenames, path containment, piece verification, disk-space errors, duplicate jobs, peer/stat reporting, explicit seeding policy, per-torrent limits, cancellation, and shutdown. Use fake engine bindings, not public swarms.
 
 ## Security review
 - Electron context isolation enabled and Node integration disabled.

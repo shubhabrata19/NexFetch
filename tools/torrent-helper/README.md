@@ -90,6 +90,8 @@ Electron main process only.
 
 ## Input scope
 
-The helper does not parse magnet URIs. The desktop app passes either a local
-`.torrent` file or a v1/v2 info hash used for metadata lookup; magnet links are
-intentionally rejected at the UI and IPC boundary.
+The helper does not parse magnet URIs. The desktop app parses magnet links
+locally and passes either a local `.torrent` file, a v1/v2 info hash, or the
+magnet's info hash plus its scheme-filtered trackers for metadata lookup.
+Trackers are validated again inside the helper: private/local hosts and
+unsupported schemes are rejected before any announce.

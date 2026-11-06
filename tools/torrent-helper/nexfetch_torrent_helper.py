@@ -784,6 +784,28 @@ class Session:
         info_hash = str(params.get("infoHash", "")).strip().lower()
         version = as_int(params.get("hashVersion"), 1)
         metadata_path = safe_metadata_path(str(params.get("metadataPath", "")))
+        source_kind = params.get("sourceKind", "infohash")
+        if source_kind not in {"infohash", "magnet"}:
+            source_kind = "infohash"
+
+        trackers: List[str] = []
+        raw_trackers = params.get("trackers")
+        if isinstance(raw_trackers, list):
+            seen_trackers = set()
+            for value in raw_trackers:
+                if not isinstance(value, str):
+                    continue
+                tracker = value.strip()
+                if not tracker or tracker in seen_trackers or len(tracker) > 2048:
+                    continue
+                valid, _reason = validate_tracker_url(tracker)
+                if not valid:
+                    continue
+                seen_trackers.add(tracker)
+                trackers.append(tracker)
+                if len(trackers) >= 20:
+                    break
+
         if version not in (1, 2):
             raise HelperError("TORRENT_INVALID", "The info hash version is not supported.")
         if version == 1 and not re.fullmatch(r"[0-9a-f]{40}", info_hash):
@@ -816,12 +838,29 @@ class Session:
                 handle = session.add_torrent(params_obj)
             except Exception as exc:
                 raise HelperError("TORRENT_INVALID", f"The info hash could not be added: {exc}")
+
+            # Magnet trackers are user-supplied untrusted input. They were
+            # already validated above (scheme + private/local host checks) and
+            # are only used to bootstrap metadata discovery; the session IP
+            # filter also blocks private address ranges at connect time.
+            for tier, tracker in enumerate(trackers):
+                try:
+                    handle.add_tracker({"url": tracker, "tier": tier})
+                except Exception:
+                    pass
+            if trackers:
+                try:
+                    handle.post_trackers()
+                except Exception:
+                    pass
+
             self.resolves[request_id] = {
                 "handle": handle,
                 "metadataPath": metadata_path,
                 "startedAt": time.time(),
                 "infoHash": info_hash,
                 "version": version,
+                "sourceKind": source_kind,
                 "lastProgressAt": 0.0,
             }
             return {"started": True}
@@ -1088,7 +1127,7 @@ class Session:
                 if st.has_metadata:
                     try:
                         ti = entry["handle"].get_torrent_info()
-                        preview = preview_from_ti(ti, "infohash")
+                        preview = preview_from_ti(ti, entry.get("sourceKind", "infohash"))
                         metadata_path = entry["metadataPath"]
                         Path(metadata_path).parent.mkdir(parents=True, exist_ok=True)
                         create_torrent = lt.create_torrent(ti)
