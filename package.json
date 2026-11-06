@@ -27,6 +27,7 @@
     "icons": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/generate-icons.ps1",
     "test": "vitest run",
     "test:watch": "vitest",
+    "screenshots": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/capture-screenshots.ps1",
     "verify:manifest": "node scripts/verify-binaries.mjs --manifest-only",
     "verify:binaries": "node scripts/verify-binaries.mjs",
     "release:checksums": "node scripts/write-release-checksums.mjs",

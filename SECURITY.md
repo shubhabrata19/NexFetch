@@ -87,7 +87,8 @@ stay enabled:
   `.github/workflows/ci.yml`.
 - Branch protection on `main`: required CI and CodeQL checks, at least one
   review, no force pushes.
-- The unsigned-preview policy in `docs/release-process.md`; binary releases
-  remain pre-releases until code signing and notarization are available.
+- The unsigned-preview policy in `docs/release-process.md`; unsigned builds are
+  published as normal releases titled "unsigned preview" with the warning in the
+  notes, until code signing and notarization are available.
 - GitHub Actions are pinned by commit SHA. Update them through reviewed
   Dependabot pull requests, not floating tags.

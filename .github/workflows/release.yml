@@ -1,0 +1,103 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and publish unsigned preview
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: tools/torrent-helper/requirements.txt
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check tag matches package version
+        shell: pwsh
+        run: |
+          $version = node -p "require('./package.json').version"
+          if ("v$version" -ne "$env:GITHUB_REF_NAME") {
+            throw "Tag $env:GITHUB_REF_NAME does not match package.json version $version."
+          }
+          "VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Typecheck, lint, and test
+        run: npm run check
+
+      - name: Validate pinned binary manifest
+        run: npm run verify:manifest
+
+      - name: Fetch pinned binaries
+        run: npm run fetch:win-binaries
+
+      - name: Build torrent helper
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-torrent-helper.ps1 -Python python
+
+      - name: Verify installed binaries
+        run: npm run verify:binaries -- --require-installed
+
+      - name: Build application
+        run: npm run build
+
+      - name: Package installer
+        run: npx electron-builder --win nsis --publish never -c.directories.output=release/v${{ env.VERSION }}
+
+      - name: Write release checksums
+        run: npm run release:checksums -- release/v${{ env.VERSION }}
+
+      - name: Publish GitHub release
+        shell: pwsh
+        run: |
+          $version = $env:VERSION
+          $tag = $env:GITHUB_REF_NAME
+          $releaseDir = "release/v$version"
+          $notes = @"
+          ## Unsigned preview build
+
+          This build is not code-signed. Windows SmartScreen will show an unknown-publisher
+          warning. Do not treat it as a stable release; use it for testing only.
+
+          Verify your download before running:
+
+              certutil -hashfile "NexFetch Setup $version.exe" SHA256
+
+          Compare the result with SHA256SUMS.txt attached to this release. A checksum
+          mismatch means the file is not the published build. Do not run it.
+
+          See docs/release-process.md for the full policy.
+          "@
+
+          gh release create $tag `
+            "$releaseDir/NexFetch Setup $version.exe" `
+            "$releaseDir/NexFetch Setup $version.exe.blockmap" `
+            "$releaseDir/SHA256SUMS.txt" `
+            --title "$tag (unsigned preview)" `
+            --notes $notes `
+            --latest

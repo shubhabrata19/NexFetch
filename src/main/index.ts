@@ -28,10 +28,17 @@ import { SqliteJobRepository } from './storage/sqlite-job-repository'
 import { SqliteDatabase } from './storage/sqlite-database'
 import { SqliteSettingsRepository } from './storage/settings-repository'
 import { createMainWindow } from './window'
+import { captureViews } from './dev-capture'
 
 const isDev = !app.isPackaged
 
 app.setName('NexFetch')
+
+// Development-only profile isolation for screenshot capture and manual testing.
+if (isDev && process.env.NEXFETCH_USER_DATA_DIR) {
+  app.setPath('userData', process.env.NEXFETCH_USER_DATA_DIR)
+}
+
 app.enableSandbox()
 
 let mainWindow: BrowserWindow | null = null
@@ -462,6 +469,23 @@ if (!gotSingleInstanceLock) {
 
       mainWindow = createMainWindow(isDev, appLogger)
       attachWindowCloseHandler(mainWindow)
+      if (isDev && process.env.NEXFETCH_CAPTURE === '1') {
+        const captureWindow = mainWindow
+        const captureDir = process.env.NEXFETCH_CAPTURE_OUT ?? join(process.cwd(), 'docs', 'images')
+        void captureViews(captureWindow, captureDir)
+          .then((paths) => {
+            for (const path of paths) appLogger.info('screenshot_captured', { path })
+          })
+          .catch((error: unknown) => {
+            appLogger.error('screenshot_capture_failed', {
+              error: error instanceof Error ? error.message : String(error),
+            })
+          })
+          .finally(() => {
+            isQuitting = true
+            app.quit()
+          })
+      }
       downloadManager?.refreshQueue()
       appLogger.info('app_ready')
     })

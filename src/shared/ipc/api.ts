@@ -32,6 +32,7 @@ export interface NexFetchApi {
     readClipboardText(): Promise<Result<string>>
     openDestination(): Promise<Result<null>>
     openLogs(): Promise<Result<null>>
+    openReleases(): Promise<Result<null>>
   }
   dependencies: {
     getStatus(): Promise<Result<DependencyStatus>>

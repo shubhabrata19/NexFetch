@@ -7,6 +7,7 @@ export const IPC = {
   readClipboardText: 'system:read-clipboard-text',
   openDestination: 'system:open-destination',
   openLogs: 'diagnostics:open-logs',
+  openReleases: 'system:open-releases',
   dependenciesStatus: 'dependencies:status',
   dependenciesRecheck: 'dependencies:recheck',
   dependenciesChanged: 'dependencies:changed',
