@@ -29,7 +29,9 @@ resources/
 ```
 
 `resources/bin/*` is ignored by Git because the binaries are large. The
-`.gitkeep` file keeps the parent directory available in clean checkouts.
+`.gitkeep` file keeps the parent directory available in clean checkouts. Only
+`win32-x64` is currently listed in the manifest; macOS/Linux entries are added
+when those builds are produced and verified.
 
 ## Brand assets
 
@@ -45,6 +47,32 @@ npm run icons
 application's `resources/assets` directory. The generated Windows, macOS, and
 Linux icon files live under `build/`.
 
+## Integrity
+
+`binaries.manifest.json` is the source of truth for pinned runtime binaries. It
+records the exact version, download URL, archive member path, and SHA-256 hash
+for each supported platform. It is tracked in Git and copied into packaged builds
+through `extraResources`.
+
+Verification happens twice:
+
+1. `scripts/fetch-win-binaries.ps1` downloads only HTTPS URLs from the manifest
+   and verifies the archive and every extracted executable before installing it.
+2. `DependencyService` hashes bundled pinned binaries at startup and refuses to
+   run one whose SHA-256 does not match the manifest.
+
+Check the manifest and any installed binaries before packaging:
+
+```bash
+npm run verify:manifest
+npm run verify:binaries -- --require-installed
+```
+
+The torrent helper is built locally with PyInstaller. Its build is not
+reproducible enough for a stable published hash, so its manifest entry has
+`"sha256": null`: presence is checked, but it is not hash-pinned. Its Python
+dependencies are pinned exactly in `tools/torrent-helper/requirements.txt`.
+
 ## Development
 
 On Windows:
@@ -53,8 +81,8 @@ On Windows:
 npm run fetch:win-binaries
 ```
 
-This downloads a development copy of yt-dlp and an LGPL FFmpeg build. It is a
-convenience script, not a release supply-chain process.
+This installs the exact versions recorded in the manifest and fails loudly on a
+checksum mismatch. It is not a floating "latest" download.
 
 During development, tools can also be found on `PATH` or via
 `NXF_YTDLP_PATH`, `NXF_FFMPEG_PATH`, and `NXF_FFPROBE_PATH`. Build the Windows
@@ -67,14 +95,14 @@ npm run build:torrent-helper
 ## Packaging
 
 `electron-builder.yml` copies `resources/bin` to `resources/bin` inside the
-packaged application through `extraResources`. `DependencyService` resolves
-`process.resourcesPath/bin/<platform>-<arch>/...` in packaged builds.
+packaged application through `extraResources`, and copies
+`resources/binaries.manifest.json` to the application resources root.
+`DependencyService` resolves `process.resourcesPath/bin/<platform>-<arch>/...`
+in packaged builds and verifies pinned binaries against the packaged manifest.
 
-Before a public release:
+Before distributing public release artifacts:
 
-- Pin exact binary versions.
-- Add SHA-256 entries in `binaries.manifest.json` and verify them at startup.
-- Include license notices and source offers.
+- Include license notices and source offers for bundled LGPL components.
 - Sign nested executables on macOS and Windows.
-- Review FFmpeg's build configuration and licensing.
+- Review FFmpeg's build configuration and licensing for each release.
 - Do not fetch or execute unverified binaries at runtime.

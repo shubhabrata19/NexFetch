@@ -318,7 +318,7 @@ if (!gotSingleInstanceLock) {
 
   void app
     .whenReady()
-    .then(() => {
+    .then(async () => {
       app.setAppUserModelId('com.nexfetch.desktop')
 
       const appLogger = new Logger(app.getPath('logs'))
@@ -371,7 +371,9 @@ if (!gotSingleInstanceLock) {
       const dependencyService = new DependencyService({
         bundledRoot: app.isPackaged ? process.resourcesPath : join(process.cwd(), 'resources'),
         allowEnvOverrides: !app.isPackaged,
+        logger: appLogger,
       })
+      await dependencyService.verifyIntegrity()
 
       const registry = new EngineRegistry()
       const youtubeEngine = new YoutubeEngine()

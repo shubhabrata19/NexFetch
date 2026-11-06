@@ -74,6 +74,7 @@ export interface TorrentSelection {
   fileIndices: number[]
   downloadLimitBytesPerSecond?: number | null
   uploadLimitBytesPerSecond?: number | null
+  maxConnections?: number | null
   seedAfterComplete?: boolean
 }
 
@@ -87,6 +88,7 @@ export interface TorrentResolvedSelection {
   fileIndices: number[]
   downloadLimitBytesPerSecond: number | null
   uploadLimitBytesPerSecond: number | null
+  maxConnections: number | null
   seedAfterComplete: boolean
 }
 
@@ -95,6 +97,7 @@ export interface TorrentSetupUpdate {
   fileIndices: number[]
   downloadLimitBytesPerSecond: number | null
   uploadLimitBytesPerSecond: number | null
+  maxConnections: number | null
   seedAfterComplete: boolean
 }
 
@@ -127,6 +130,8 @@ export interface TorrentJobDetails {
   ratio: number | null
   downloadLimitBytesPerSecond: number | null
   uploadLimitBytesPerSecond: number | null
+  /** Per-torrent connection cap. Null inherits the connection profile. */
+  maxConnections: number | null
   seedAfterComplete: boolean
   discovery: TorrentDiscovery
   /** Present only while metadata is being fetched for an info hash. */

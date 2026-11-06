@@ -1,14 +1,14 @@
 ---
 name: youtube-metadata-download
-description: Implement NexFetch's first source adapter for YouTube metadata, actual format discovery, quality selection up to 2160p, and download jobs.
+description: Maintain NexFetch's YouTube adapter for metadata, actual format discovery, quality selection up to 2160p, and download jobs.
 compatibility: opencode
 ---
 
 # YouTube metadata and download pipeline
 
-This skill covers the first NexFetch source adapter. Keep the implementation behind the shared download-engine contract so future HTTP and BitTorrent engines can coexist without YouTube-specific assumptions in the queue.
+This skill covers the YouTube adapter. Keep the implementation behind the shared download-engine contract so the HTTP and BitTorrent engines stay independent of YouTube-specific assumptions.
 
-## Intended MVP flow
+## Intended flow
 1. User pastes a YouTube URL.
 2. Validate and normalize the supported URL form.
 3. Fetch metadata without downloading media.

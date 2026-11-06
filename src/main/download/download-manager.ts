@@ -12,6 +12,7 @@ import { emptyProgress } from '@shared/domain/job'
 import type {
   TorrentJobDetails,
   TorrentPreview,
+  TorrentResolvedSelection,
   TorrentResolveProgress,
 } from '@shared/domain/torrent'
 import { parseTorrentInfoHash } from '@shared/domain/torrent-hash'
@@ -28,6 +29,7 @@ import { toJobView } from './job-repository'
 import type { PreviewCache } from './preview-cache'
 
 interface JobRuntime {
+  job: PersistedJobRecord
   controller: AbortController
   completion: Promise<void>
   lastPersistAt: number
@@ -193,6 +195,7 @@ export class DownloadManager {
       ratio: null,
       downloadLimitBytesPerSecond: null,
       uploadLimitBytesPerSecond: null,
+      maxConnections: null,
       seedAfterComplete: settings.torrentSeedAfterComplete,
       discovery: {
         dht: true,
@@ -509,6 +512,7 @@ export class DownloadManager {
       fileIndices: details.files.filter((file) => file.selected).map((file) => file.index),
       downloadLimitBytesPerSecond: details.downloadLimitBytesPerSecond,
       uploadLimitBytesPerSecond: details.uploadLimitBytesPerSecond,
+      maxConnections: details.maxConnections ?? null,
       seedAfterComplete: true,
     })
     job.selection = selection
@@ -541,14 +545,47 @@ export class DownloadManager {
     jobId: string,
     downloadLimitBytesPerSecond: number | null,
     uploadLimitBytesPerSecond: number | null,
+    maxConnections: number | null,
   ): Promise<DownloadJob> {
     const job = this.getOrThrow(jobId)
     const engine = this.options.registry.get(job.engineId)
     if (!engine.setLimits) {
-      throw new DomainError('INVALID_REQUEST', 'This download does not support speed limits.')
+      throw new DomainError('INVALID_REQUEST', 'This download does not support transfer limits.')
     }
-    await engine.setLimits(job, downloadLimitBytesPerSecond, uploadLimitBytesPerSecond)
-    return this.getJob(jobId) ?? toJobView(job)
+    const target = this.runtimes.get(jobId)?.job ?? job
+    await engine.setLimits(
+      toJobView(target),
+      downloadLimitBytesPerSecond,
+      uploadLimitBytesPerSecond,
+      maxConnections,
+    )
+
+    if (target.details?.engineId === 'torrent') {
+      target.details = {
+        ...target.details,
+        downloadLimitBytesPerSecond,
+        uploadLimitBytesPerSecond,
+        maxConnections,
+      }
+      if (target.selection?.engineId === 'torrent') {
+        const data = target.selection.data as TorrentResolvedSelection
+        target.selection = {
+          ...target.selection,
+          data: {
+            ...data,
+            downloadLimitBytesPerSecond,
+            uploadLimitBytesPerSecond,
+            maxConnections,
+          },
+          details: target.details,
+        }
+      }
+      this.touch(target)
+      this.options.jobs.save(target)
+      this.emit(target)
+    }
+
+    return toJobView(target)
   }
 
   async findMorePeers(jobId: string): Promise<DownloadJob> {
@@ -841,6 +878,7 @@ export class DownloadManager {
   private startJob(job: PersistedJobRecord): void {
     const controller = new AbortController()
     const runtime: JobRuntime = {
+      job,
       controller,
       completion: Promise.resolve(),
       lastPersistAt: 0,

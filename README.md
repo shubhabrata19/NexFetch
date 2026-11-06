@@ -4,6 +4,10 @@ NexFetch is a modern desktop download manager designed to grow from a focused
 YouTube downloader into a universal download manager with independent protocol
 engines.
 
+Licensed under the Apache License 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
+
+[![CI](https://github.com/shubhabrata19/NexFetch/actions/workflows/ci.yml/badge.svg)](https://github.com/shubhabrata19/NexFetch/actions/workflows/ci.yml)
+
 This repository currently contains the **universal manager core** with three
 working engines:
 
@@ -14,8 +18,8 @@ working engines:
   optional SHA-256 verification, and unknown-length support.
 - BitTorrent through a bundled libtorrent 2.x helper: `.torrent` files and v1/v2
   info hashes, metadata-only DHT lookups, DHT/PEX/LSD, tracker tiers, file
-  selection, pause/resume, per-torrent speed limits, seeding controls, and
-  peer/tracker detail.
+  selection, pause/resume, per-torrent speed and peer limits, seeding controls,
+  and sortable peer/tracker detail.
 - SQLite-backed job and settings persistence with automatic JSON migration.
 - Real download queue with scheduling, progress, cancellation, retry,
   completion, and history filters.
@@ -72,6 +76,8 @@ Magnet links are intentionally not accepted. BitTorrent input is a local
   responsive sidebar collapse, and visually hidden scrollbars that preserve wheel
   and keyboard scrolling.
 - Structured local JSON logging with redaction and rotation.
+- Pinned, SHA-256-verified runtime binaries with startup enforcement.
+- GitHub Actions CI, CodeQL scanning, and Dependabot updates.
 - Windows packaging with bundled runtime binaries.
 
 Not implemented yet:
@@ -115,8 +121,11 @@ Packaged builds use bundled binaries from `resources/bin` and do not trust
 renderer-provided executable paths.
 
 `resources/bin/` is intentionally ignored by Git because the binaries are large.
-On Windows, `npm run fetch:win-binaries` downloads a development copy. Build the
-torrent helper once with:
+`resources/binaries.manifest.json` records the pinned versions and SHA-256
+hashes. On Windows, `npm run fetch:win-binaries` downloads those exact versions,
+verifies every archive and executable, and refuses to install a mismatch. The
+application verifies the bundled binaries again at startup and will not run a
+binary that no longer matches the manifest. Build the torrent helper once with:
 
 ```bash
 npm run build:torrent-helper
@@ -132,9 +141,12 @@ resources/bin/win32-x64/
   nexfetch-torrent-helper.exe
 ```
 
-The release build includes that directory through `extraResources`. Before a
-public release, the binaries must be pinned, checksum-verified, and license
-reviewed.
+The release build includes that directory and the manifest through
+`extraResources`. The torrent helper is built locally because PyInstaller builds
+are not reproducible enough to publish a stable hash, so it is presence-checked
+rather than hash-pinned; its Python dependencies are pinned in
+`tools/torrent-helper/requirements.txt`. Signing and notarization remain release
+workflow tasks.
 
 ## Commands
 
@@ -145,33 +157,60 @@ npm run check        # typecheck + lint + tests
 npm run typecheck
 npm run lint
 npm run test
+npm run verify:manifest  # validate the pinned binary manifest
+npm run verify:binaries  # verify installed binaries against the manifest
 npm run format       # format the repository
 npm run format:check # verify formatting
 npm run build        # production build into out/
 npm run package      # unpacked application with resources
 npm run package:win  # Windows installer
 npm run build:torrent-helper # build the libtorrent helper executable
+npm run release:checksums -- release/<version> # write SHA256SUMS.txt
 npm run icons        # regenerate platform icons
 ```
 
 ## Release build
 
-The current Windows review build is produced with:
+Binary builds are currently **unsigned previews**. They are suitable for
+technical testing only and must not be presented as a stable public release.
+The full policy and checklist are in [docs/release-process.md](docs/release-process.md).
 
 ```bash
-npx electron-builder --win nsis -c.directories.output=release/v0.5.0-lookup
+npm run check
+npm run fetch:win-binaries
+npm run verify:binaries -- --require-installed
+npm run build
+npx electron-builder --win nsis -c.directories.output=release/v<version>
+npm run release:checksums -- release/v<version>
 ```
 
 Outputs:
 
 ```text
-release/v0.5.0-lookup/NexFetch Setup 0.5.0.exe
-release/v0.5.0-lookup/win-unpacked/NexFetch.exe
+release/v<version>/NexFetch Setup <version>.exe
+release/v<version>/SHA256SUMS.txt
+release/v<version>/win-unpacked/NexFetch.exe
 ```
 
-The installer is currently unsigned, so Windows SmartScreen may warn. The
-packaged application includes the runtime binaries from `resources/bin` and the
-brand asset from `resources/assets`.
+The installer is unsigned, so Windows SmartScreen will warn about an unknown
+publisher. Publish preview artifacts only as a GitHub pre-release, always attach
+`SHA256SUMS.txt`, and include the unsigned warning. Do not distribute macOS
+binaries until Developer ID signing and notarization are available.
+
+### Verify a download
+
+Windows:
+
+```powershell
+certutil -hashfile "NexFetch Setup <version>.exe" SHA256
+```
+
+Compare the result with `SHA256SUMS.txt` from the same release. On macOS/Linux,
+run `sha256sum -c SHA256SUMS.txt`. A checksum mismatch means the file is not the
+published build and should not be run.
+
+The packaged application includes the verified runtime binaries from
+`resources/bin` and the brand asset from `resources/assets`.
 
 ## Interface
 
@@ -190,6 +229,12 @@ brand asset from `resources/assets`.
   Downloading, Seeding, and Completed groups; files, peers, trackers, and
   discovery tabs; seeds/peers connected-versus-available counts; live
   download/upload speed; per-torrent limits; and explicit stop-seeding controls.
+- The peer table is sortable by address, client, progress, download speed,
+  upload speed, and seed/peer type, with persistent sort state and accessible
+  sort indicators.
+- Transfer limits cover download speed, upload speed, and maximum connected
+  peers. Blank fields inherit the global speed limit or connection-profile peer
+  default; zero speed means unlimited. Applied limits persist across restart.
 - Closing the window while transfers are active offers Continue in Background
   (tray) or Close NexFetch. Unfinished downloads resume next launch; seeding
   stops and does not resume automatically.
@@ -238,15 +283,17 @@ explicit light or dark preference, and Settings offers System, Light, and Dark.
 ```text
 src/
   main/       Electron main process, IPC, services, engine registry, queue
-    download/ job manager, preview cache, generic preview service
-    engines/  YouTube, HTTP/HTTPS, and libtorrent adapter
-  tools/torrent-helper/  Python libtorrent JSON-lines helper
+    download/ job manager, preview cache, generic preview services
+    engines/  YouTube, HTTP/HTTPS, and BitTorrent adapters
     storage/  SQLite schema, repositories, JSON migration
   preload/    narrow contextBridge API
   renderer/   React UI
   shared/     domain models, IPC contracts, validation, pure policy code
+tools/
+  torrent-helper/  Python libtorrent JSON-lines helper
 tests/        Vitest unit and integration tests
-resources/    bundled binaries and licenses (binaries ignored by Git)
+resources/    bundled binaries, manifest, and licenses (binaries ignored by Git)
+docs/         release process documentation
 ```
 
 ### Boundaries
@@ -289,10 +336,39 @@ resources/    bundled binaries and licenses (binaries ignored by Git)
   private torrents.
 - Router port mapping uses NAT-PMP/UPnP only when enabled in Settings, maps one
   temporary port, and removes it on exit.
-- Info hashes and magnet-style identifiers are never written to logs.
+- Full info hashes and magnet-style identifiers are not written to logs;
+  metadata diagnostics may include only a short info-hash prefix.
 - No cookies, credentials, DRM circumvention, paywall bypass, private-video
   access, or geo-bypass is supported.
 - Logs are local and redacted; no telemetry is sent.
+- Runtime binaries are pinned in `resources/binaries.manifest.json`; the fetch
+  script is HTTPS-only and verifies archives and executables, and the app
+  re-verifies pinned binaries with SHA-256 before running them. A modified
+  binary is refused rather than silently executed.
+
+## Responsible use
+
+NexFetch does not include DRM circumvention, paywall bypass, private-video
+access, credential theft, or geo-restriction bypass. Only download content you
+own or are permitted to download. You are responsible for complying with
+copyright law, the terms of service of the source site, and local law. The
+project is not affiliated with YouTube or any other source platform.
+
+## Documentation
+
+- [Release process](docs/release-process.md) — unsigned-preview policy, build
+  checklist, checksums, and the signing gate.
+- [Security policy](SECURITY.md) — reporting, scope, threat model, and
+  maintainer repository settings.
+- [Bundled binaries](resources/README.md) and
+  [third-party notices](resources/licenses/THIRD-PARTY-NOTICES.md).
+- [Torrent helper protocol](tools/torrent-helper/README.md).
+
+## License
+
+NexFetch is licensed under the Apache License 2.0. See [LICENSE](LICENSE) and
+[NOTICE](NOTICE). Bundled third-party runtime tools keep their own licenses; see
+[resources/licenses/THIRD-PARTY-NOTICES.md](resources/licenses/THIRD-PARTY-NOTICES.md).
 
 ## Next milestone
 
@@ -300,12 +376,13 @@ The torrent client is implemented. The remaining release work is:
 
 1. Run packaged-app smoke tests on Windows, macOS, and Linux, including automatic
    JSON-to-SQLite migration and the bundled torrent helper.
-2. Add code signing and a reproducible release workflow for the Electron app and
-   the torrent helper.
+2. Add code signing/notarization and a tag-driven signed release workflow.
 3. Harden large-swarm resource use, sleep/network-change recovery, and
    cross-platform libtorrent packaging.
 4. Add automated end-to-end tests with a local legal swarm; keep public swarms out
    of routine CI.
 
 See `.opencode/agents/` and `.opencode/skills/` for the project-specific
-architecture, UI, download-engine, torrent, and release guidance.
+architecture, UI, download-engine, torrent, and release guidance. These files
+are AI-agent instruction documents used during development; they are not part of
+the shipped application or a supported end-user API.

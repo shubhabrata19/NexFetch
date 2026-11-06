@@ -1,34 +1,34 @@
 ---
 name: torrent-download-engine
-description: Plan and implement NexFetch's future BitTorrent adapter for authorized magnet-link and torrent-file downloads, including verification and explicit seeding controls.
+description: Maintain NexFetch's BitTorrent adapter for authorized `.torrent` and info-hash downloads, including verification and explicit seeding controls.
 compatibility: opencode
 ---
 
 # BitTorrent engine for NexFetch
 
-This skill applies only when implementing the BitTorrent milestone. Do not add torrent functionality to the YouTube MVP merely because this skill exists.
+Use this skill when maintaining or extending the implemented BitTorrent engine. Keep changes behind the shared engine contract and preserve the security boundaries around the libtorrent helper process.
 
 ## Supported user flow
-- User supplies a magnet URI or selects a local `.torrent` file.
+- User selects a local `.torrent` file or supplies a v1/v2 info hash for DHT metadata lookup. Magnet links are intentionally rejected by the desktop app.
 - App validates and resolves torrent metadata.
 - User reviews the content/file list and selects a destination and files where supported.
 - User starts the transfer and sees downloading/verification state and available peer/seed metrics.
 - User sees completion and makes an explicit choice about whether to seed/share, subject to available engine capabilities.
 
-## Engine selection
-Before selecting a library, compare maintained options for:
+## Engine choice
+The current implementation uses a dedicated libtorrent 2.x helper process. Maintain it with attention to:
 - Electron/Node integration quality and supported OS/CPU architectures.
-- Native binary/binding distribution and packaging complexity.
+- Native binary distribution, PyInstaller packaging, and code-signing strategy.
 - License compatibility and redistribution obligations.
 - Security history, maintenance cadence, and update process.
-- Support for magnet links, `.torrent` files, piece verification, cancellation, and seeding controls.
+- Support for `.torrent` files, info-hash metadata, piece verification, cancellation, and seeding controls.
 
-Do not assume a specific library is the right choice without checking the current repository, platform targets, and licensing. Keep the library behind a dedicated adapter implementing NexFetch's common engine contract.
+Keep the library behind a dedicated adapter implementing NexFetch's common engine contract.
 
 ## Security and correctness
-- Treat magnet URIs, torrent metadata, file names, paths, and tracker responses as untrusted.
+- Treat `.torrent` metadata, info hashes, file names, paths, and tracker responses as untrusted.
 - Prevent path traversal and reject unsafe output paths.
-- Avoid logging full magnet URIs or sensitive identifiers unnecessarily.
+- Avoid logging full info hashes or sensitive identifiers unnecessarily.
 - Verify pieces according to engine behavior and surface verification failures.
 - Handle malformed metadata, disk-space errors, tracker/DHT errors, duplicate jobs/files, cancellation, and shutdown.
 - Expose peer counts, seed counts, speeds, and ETA only when the engine supplies reliable measurements.
@@ -42,4 +42,4 @@ Map torrent lifecycle into the common queue while retaining torrent-specific det
 BitTorrent is a transfer protocol; the content's rights remain the user's responsibility. Support only content the user is authorized to obtain and share. Do not implement piracy-oriented search, scraping, catalogues, recommendations, or preconfigured sources. Do not bypass DRM, access controls, or paywalls.
 
 ## Tests
-Use fake engine bindings and test magnet parsing, `.torrent` parsing, malicious filenames, path containment, state mapping, verification failures, disk-space errors, cancellation, seeding preferences, duplicate jobs, and clean shutdown. Do not use public swarms as routine automated test fixtures.
+Use fake engine bindings and test `.torrent` parsing, info-hash metadata lookup, malicious filenames, path containment, state mapping, verification failures, disk-space errors, cancellation, seeding preferences, duplicate jobs, and clean shutdown. Do not use public swarms as routine automated test fixtures.

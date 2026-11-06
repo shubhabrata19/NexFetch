@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { DownloadJob, Settings, TorrentSetupUpdateRequest } from '@shared/ipc/contracts'
 import type {
   TorrentFileEntry,
@@ -7,6 +7,7 @@ import type {
   TorrentTrackerEntry,
 } from '@shared/domain/torrent'
 import { Icon } from '../../components/Icon'
+import { PeerLimitInput } from '../../components/PeerLimitInput'
 import {
   RateLimitInput,
   rateDraftFromBytes,
@@ -15,6 +16,14 @@ import {
 import type { RateLimitDraft } from '../../components/RateLimitInput'
 import { formatBytes, formatEta, formatSpeed } from '../../lib/format'
 import { defaultTorrentDestination, torrentFolderName } from '../../lib/paths'
+import {
+  connectionProfileLabel,
+  parsePeerLimit,
+  peerLimitDraft,
+  profilePeerLimit,
+} from '../../lib/torrent-limits'
+import { cleanPeerClientName, sortPeers } from './peer-sort'
+import type { PeerSortDirection, PeerSortKey } from './peer-sort'
 
 interface TorrentsPageProps {
   settings: Settings
@@ -37,7 +46,8 @@ interface TorrentsPageProps {
     jobId: string,
     downloadLimitBytesPerSecond: number | null,
     uploadLimitBytesPerSecond: number | null,
-  ) => void
+    maxConnections: number | null,
+  ) => Promise<DownloadJob | null>
   onAddTorrent: () => void
   onOpenSettings: () => void
 }
@@ -50,6 +60,7 @@ interface SetupState {
   selected: Set<number>
   downloadLimit: RateLimitDraft
   uploadLimit: RateLimitDraft
+  maxConnections: string
   seedAfterComplete: boolean
 }
 
@@ -407,28 +418,127 @@ function TrackerList({ trackers }: { trackers: TorrentTrackerEntry[] }) {
   )
 }
 
-function PeerList({ peers }: { peers: TorrentPeerEntry[] }) {
+function PeerSortHeader({
+  label,
+  sortLabel,
+  sortKey,
+  activeKey,
+  direction,
+  onSort,
+}: {
+  label: string
+  sortLabel: string
+  sortKey: PeerSortKey
+  activeKey: PeerSortKey
+  direction: PeerSortDirection
+  onSort: (key: PeerSortKey) => void
+}) {
+  const active = sortKey === activeKey
+  return (
+    <span
+      role="columnheader"
+      aria-sort={active ? (direction === 'asc' ? 'ascending' : 'descending') : 'none'}
+    >
+      <button
+        type="button"
+        className="torrent-sort-button"
+        onClick={() => onSort(sortKey)}
+        title={`Sort by ${sortLabel}`}
+        aria-label={`Sort by ${sortLabel}`}
+      >
+        {label}
+        <span
+          className={`torrent-sort-indicator${active ? ' torrent-sort-indicator--active' : ''}`}
+          aria-hidden="true"
+        >
+          {active ? (direction === 'asc' ? '▲' : '▼') : '↕'}
+        </span>
+      </button>
+    </span>
+  )
+}
+
+function PeerList({
+  peers,
+  sortKey,
+  sortDirection,
+  onSort,
+}: {
+  peers: TorrentPeerEntry[]
+  sortKey: PeerSortKey
+  sortDirection: PeerSortDirection
+  onSort: (key: PeerSortKey) => void
+}) {
   if (peers.length === 0) {
     return <p className="torrent-empty-tab">No peers connected yet.</p>
   }
+
+  const sorted = sortPeers(peers, sortKey, sortDirection)
+
   return (
-    <div className="torrent-table torrent-table--peers">
-      <div className="torrent-table-head">
-        <span>Address</span>
-        <span>Client</span>
-        <span>Progress</span>
-        <span>↓</span>
-        <span>↑</span>
-        <span>Type</span>
+    <div className="torrent-table torrent-table--peers" role="table" aria-label="Connected peers">
+      <div className="torrent-table-head" role="row">
+        <PeerSortHeader
+          label="Address"
+          sortLabel="address"
+          sortKey="address"
+          activeKey={sortKey}
+          direction={sortDirection}
+          onSort={onSort}
+        />
+        <PeerSortHeader
+          label="Client"
+          sortLabel="client"
+          sortKey="client"
+          activeKey={sortKey}
+          direction={sortDirection}
+          onSort={onSort}
+        />
+        <PeerSortHeader
+          label="Progress"
+          sortLabel="progress"
+          sortKey="progress"
+          activeKey={sortKey}
+          direction={sortDirection}
+          onSort={onSort}
+        />
+        <PeerSortHeader
+          label="Down"
+          sortLabel="download speed"
+          sortKey="download"
+          activeKey={sortKey}
+          direction={sortDirection}
+          onSort={onSort}
+        />
+        <PeerSortHeader
+          label="Up"
+          sortLabel="upload speed"
+          sortKey="upload"
+          activeKey={sortKey}
+          direction={sortDirection}
+          onSort={onSort}
+        />
+        <PeerSortHeader
+          label="Type"
+          sortLabel="peer type"
+          sortKey="type"
+          activeKey={sortKey}
+          direction={sortDirection}
+          onSort={onSort}
+        />
       </div>
-      {peers.map((peer) => (
-        <div className="torrent-table-row" key={peer.address}>
-          <span className="torrent-table-url">{peer.address}</span>
-          <span>{peer.client}</span>
-          <span>{Math.round(peer.progress * 100)}%</span>
-          <span>{formatSpeed(peer.downloadRateBytesPerSecond)}</span>
-          <span>{formatSpeed(peer.uploadRateBytesPerSecond)}</span>
-          <span>{peerLabel(peer)}</span>
+      {sorted.map((peer) => (
+        <div className="torrent-table-row" key={peer.address} role="row">
+          <span className="torrent-table-url" role="cell" title={peer.address}>
+            {peer.address}
+          </span>
+          <span role="cell" title={cleanPeerClientName(peer.client)}>
+            {cleanPeerClientName(peer.client)}
+          </span>
+          <span role="cell">{Math.round(peer.progress * 100)}%</span>
+          <span role="cell">{formatSpeed(peer.downloadRateBytesPerSecond)}</span>
+          <span role="cell">{formatSpeed(peer.uploadRateBytesPerSecond)}</span>
+          <span role="cell">{peerLabel(peer)}</span>
         </div>
       ))}
     </div>
@@ -607,6 +717,9 @@ export function TorrentsPage({
   const [setupError, setSetupError] = useState<string | null>(null)
   const [starting, setStarting] = useState(false)
   const [limitsOpen, setLimitsOpen] = useState(false)
+  const [applyingLimits, setApplyingLimits] = useState(false)
+  const [limitsFeedback, setLimitsFeedback] = useState<string | null>(null)
+  const [limitsError, setLimitsError] = useState<string | null>(null)
   const [liveDownloadLimit, setLiveDownloadLimit] = useState<RateLimitDraft>({
     value: '',
     unit: 'MB',
@@ -615,6 +728,9 @@ export function TorrentsPage({
     value: '',
     unit: 'MB',
   })
+  const [liveMaxConnections, setLiveMaxConnections] = useState('')
+  const [peerSortKey, setPeerSortKey] = useState<PeerSortKey>('address')
+  const [peerSortDirection, setPeerSortDirection] = useState<PeerSortDirection>('asc')
 
   const torrents = useMemo(
     () =>
@@ -674,6 +790,7 @@ export function TorrentsPage({
       selected: new Set(details.files.filter((file) => file.selected).map((file) => file.index)),
       downloadLimit: rateDraftFromBytes(details.downloadLimitBytesPerSecond),
       uploadLimit: rateDraftFromBytes(details.uploadLimitBytesPerSecond),
+      maxConnections: peerLimitDraft(details.maxConnections),
       seedAfterComplete: details.seedAfterComplete,
     })
     setSetupError(null)
@@ -682,17 +799,29 @@ export function TorrentsPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.id, selected?.status])
 
-  useEffect(() => {
-    if (!selected || selected.status !== 'seeding') {
-      setLimitsOpen(false)
-      return
-    }
-    const details = torrentDetails(selected)
+  const syncLiveLimits = useCallback((details: TorrentJobDetails | null): void => {
     setLiveDownloadLimit(rateDraftFromBytes(details?.downloadLimitBytesPerSecond ?? null))
     setLiveUploadLimit(rateDraftFromBytes(details?.uploadLimitBytesPerSecond ?? null))
-    // Initialize only when the selected torrent or its status changes.
+    setLiveMaxConnections(peerLimitDraft(details?.maxConnections))
+  }, [])
+
+  useEffect(() => {
+    setLimitsOpen(false)
+    setLimitsFeedback(null)
+    setLimitsError(null)
+  }, [selected?.id])
+
+  useEffect(() => {
+    syncLiveLimits(selectedDetails)
+    // Only re-sync when stored limits change, not on every progress update.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected?.id, selected?.status])
+  }, [
+    selected?.id,
+    selectedDetails?.downloadLimitBytesPerSecond,
+    selectedDetails?.uploadLimitBytesPerSecond,
+    selectedDetails?.maxConnections,
+    syncLiveLimits,
+  ])
 
   const groups = useMemo(() => {
     const preparingItems = filtered.filter(isMetadataJob)
@@ -729,8 +858,11 @@ export function TorrentsPage({
     if (!selected || !setup) return
     const downloadLimit = rateDraftToBytes(setup.downloadLimit)
     const uploadLimit = rateDraftToBytes(setup.uploadLimit)
-    if (downloadLimit === undefined || uploadLimit === undefined) {
-      setSetupError('Speed limits must be positive numbers, or blank to use the global limit.')
+    const maxConnections = parsePeerLimit(setup.maxConnections)
+    if (downloadLimit === undefined || uploadLimit === undefined || maxConnections === undefined) {
+      setSetupError(
+        'Speed limits must be zero or a positive number. Max peers must be 1–1000. Blank inherits the defaults.',
+      )
       return
     }
     if (setup.selected.size === 0) {
@@ -746,6 +878,7 @@ export function TorrentsPage({
         fileIndices: [...setup.selected],
         downloadLimitBytesPerSecond: downloadLimit,
         uploadLimitBytesPerSecond: uploadLimit,
+        maxConnections,
         seedAfterComplete: setup.seedAfterComplete,
       })
       if (job) {
@@ -757,13 +890,78 @@ export function TorrentsPage({
     }
   }
 
-  const saveLiveLimits = (): void => {
-    if (!selected) return
-    const downloadLimit = rateDraftToBytes(liveDownloadLimit)
-    const uploadLimit = rateDraftToBytes(liveUploadLimit)
-    if (downloadLimit === undefined || uploadLimit === undefined) return
-    onSetTorrentLimits(selected.id, downloadLimit, uploadLimit)
+  const liveDownloadBytes = rateDraftToBytes(liveDownloadLimit)
+  const liveUploadBytes = rateDraftToBytes(liveUploadLimit)
+  const liveMaxConnectionsValue = parsePeerLimit(liveMaxConnections)
+  const liveValidationMessage =
+    liveDownloadBytes === undefined || liveUploadBytes === undefined
+      ? 'Speed limits must be zero or a positive number, or blank to use the global limit.'
+      : liveMaxConnectionsValue === undefined
+        ? 'Max peers must be a whole number from 1 to 1000, or blank to use the profile default.'
+        : null
+  const liveLimitsDirty =
+    selectedDetails !== null &&
+    (liveDownloadBytes !== (selectedDetails.downloadLimitBytesPerSecond ?? null) ||
+      liveUploadBytes !== (selectedDetails.uploadLimitBytesPerSecond ?? null) ||
+      liveMaxConnectionsValue !== (selectedDetails.maxConnections ?? null))
+  const profilePeers = profilePeerLimit(settings.torrentConnectionProfile)
+
+  const toggleLiveLimits = (): void => {
+    if (limitsOpen) {
+      setLimitsOpen(false)
+      return
+    }
+    syncLiveLimits(selectedDetails)
+    setLimitsError(null)
+    setLimitsFeedback(null)
+    setLimitsOpen(true)
+  }
+
+  const cancelLiveLimits = (): void => {
+    syncLiveLimits(selectedDetails)
     setLimitsOpen(false)
+    setLimitsError(null)
+    setLimitsFeedback(null)
+  }
+
+  const useLimitDefaults = (): void => {
+    setLiveDownloadLimit({ value: '', unit: 'MB' })
+    setLiveUploadLimit({ value: '', unit: 'MB' })
+    setLiveMaxConnections('')
+    setLimitsError(null)
+    setLimitsFeedback(null)
+  }
+
+  const saveLiveLimits = async (): Promise<void> => {
+    if (!selected || !liveLimitsDirty) return
+    if (
+      liveDownloadBytes === undefined ||
+      liveUploadBytes === undefined ||
+      liveMaxConnectionsValue === undefined
+    ) {
+      setLimitsError(liveValidationMessage ?? 'The transfer limits are invalid.')
+      return
+    }
+    setApplyingLimits(true)
+    setLimitsError(null)
+    setLimitsFeedback(null)
+    try {
+      const job = await onSetTorrentLimits(
+        selected.id,
+        liveDownloadBytes,
+        liveUploadBytes,
+        liveMaxConnectionsValue,
+      )
+      if (job) {
+        setLimitsFeedback('Transfer limits applied.')
+      } else {
+        setLimitsError('The transfer limits could not be applied.')
+      }
+    } catch {
+      setLimitsError('The transfer limits could not be applied.')
+    } finally {
+      setApplyingLimits(false)
+    }
   }
 
   return (
@@ -1015,7 +1213,7 @@ export function TorrentsPage({
                     <div className="torrent-file-tools">
                       <button
                         type="button"
-                        className="link-button"
+                        className="button button--ghost button--small"
                         onClick={() =>
                           setSetup({
                             ...setup,
@@ -1027,7 +1225,7 @@ export function TorrentsPage({
                       </button>
                       <button
                         type="button"
-                        className="link-button"
+                        className="button button--ghost button--small"
                         onClick={() => setSetup({ ...setup, selected: new Set() })}
                       >
                         Select none
@@ -1050,10 +1248,10 @@ export function TorrentsPage({
                       <h3>Destination</h3>
                       <button
                         type="button"
-                        className="link-button"
+                        className="button button--ghost button--small"
                         onClick={() => void changeDestination()}
                       >
-                        Change
+                        <Icon name="folder" size={14} /> Change
                       </button>
                     </div>
                     <p className="path-value torrent-destination" title={setup.destination}>
@@ -1064,7 +1262,7 @@ export function TorrentsPage({
                   <section className="torrent-setup-section">
                     <div className="torrent-section-heading">
                       <h3>Speed limits</h3>
-                      <span>Blank uses the global limit</span>
+                      <span>Blank uses the global limit · 0 means unlimited</span>
                     </div>
                     <div className="torrent-limit-grid">
                       <RateLimitInput
@@ -1082,6 +1280,31 @@ export function TorrentsPage({
                         onChange={(value) => setSetup({ ...setup, uploadLimit: value })}
                       />
                     </div>
+                  </section>
+
+                  <section className="torrent-setup-section">
+                    <div className="torrent-section-heading">
+                      <h3>Connections</h3>
+                      <span>
+                        Blank uses the {connectionProfileLabel(settings.torrentConnectionProfile)}{' '}
+                        profile
+                      </span>
+                    </div>
+                    <div className="torrent-peer-limit-field">
+                      <PeerLimitInput
+                        id="torrent-setup-max-connections"
+                        label="Max connected peers"
+                        value={setup.maxConnections}
+                        placeholder={profilePeers}
+                        describedBy="torrent-setup-peer-hint"
+                        onChange={(value) => setSetup({ ...setup, maxConnections: value })}
+                      />
+                    </div>
+                    <p id="torrent-setup-peer-hint" className="torrent-field-hint">
+                      Caps connected peers for this torrent. The{' '}
+                      {connectionProfileLabel(settings.torrentConnectionProfile)} profile default is{' '}
+                      {profilePeers} peers.
+                    </p>
                   </section>
 
                   <section className="torrent-setup-section torrent-setup-section--inline">
@@ -1104,8 +1327,12 @@ export function TorrentsPage({
                   <section className="torrent-setup-section">
                     <div className="torrent-section-heading">
                       <h3>Discovery</h3>
-                      <button type="button" className="link-button" onClick={onOpenSettings}>
-                        Settings
+                      <button
+                        type="button"
+                        className="button button--ghost button--small"
+                        onClick={onOpenSettings}
+                      >
+                        <Icon name="settings" size={14} /> Settings
                       </button>
                     </div>
                     <div className="torrent-discovery">
@@ -1232,24 +1459,26 @@ export function TorrentsPage({
                     <div className="torrent-live-actions">
                       <button
                         type="button"
-                        className="link-button"
+                        className="button button--secondary button--small"
                         onClick={() => onFindMorePeers(selected.id)}
                       >
-                        Find more peers
+                        <Icon name="refresh" size={14} /> Find more peers
                       </button>
                       <button
                         type="button"
-                        className="link-button"
+                        className="button button--secondary button--small"
                         onClick={() => onVerifyTorrent(selected.id)}
                       >
-                        Verify files
+                        <Icon name="check" size={14} /> Verify files
                       </button>
                       <button
                         type="button"
-                        className="link-button"
-                        onClick={() => setLimitsOpen((value) => !value)}
+                        className={`button button--small${limitsOpen ? ' button--primary' : ' button--secondary'}`}
+                        onClick={toggleLiveLimits}
+                        aria-expanded={limitsOpen}
+                        aria-controls="torrent-live-limits"
                       >
-                        Speed limits
+                        <Icon name="settings" size={14} /> Transfer limits
                       </button>
                       <span className="torrent-limit-summary">
                         {effectiveRateLabel(
@@ -1261,32 +1490,104 @@ export function TorrentsPage({
                           selectedDetails.uploadLimitBytesPerSecond,
                           settings.maxUploadRateBytesPerSecond,
                         )}{' '}
-                        up
+                        up · {selectedDetails.maxConnections ?? profilePeers} peers max
                       </span>
                     </div>
                     {limitsOpen ? (
-                      <div className="torrent-live-limit-form">
+                      <div
+                        className="torrent-live-limit-form"
+                        id="torrent-live-limits"
+                        role="group"
+                        aria-label="Per-torrent transfer limits"
+                      >
                         <RateLimitInput
                           id="torrent-live-download-limit"
                           label="Download"
                           value={liveDownloadLimit}
                           placeholderBytes={settings.maxDownloadRateBytesPerSecond}
-                          onChange={setLiveDownloadLimit}
+                          invalid={liveDownloadBytes === undefined}
+                          describedBy="torrent-live-limit-hint"
+                          onChange={(value) => {
+                            setLiveDownloadLimit(value)
+                            setLimitsError(null)
+                            setLimitsFeedback(null)
+                          }}
                         />
                         <RateLimitInput
                           id="torrent-live-upload-limit"
                           label="Upload"
                           value={liveUploadLimit}
                           placeholderBytes={settings.maxUploadRateBytesPerSecond}
-                          onChange={setLiveUploadLimit}
+                          invalid={liveUploadBytes === undefined}
+                          describedBy="torrent-live-limit-hint"
+                          onChange={(value) => {
+                            setLiveUploadLimit(value)
+                            setLimitsError(null)
+                            setLimitsFeedback(null)
+                          }}
                         />
-                        <button
-                          type="button"
-                          className="button button--secondary button--small"
-                          onClick={saveLiveLimits}
-                        >
-                          Apply
-                        </button>
+                        <PeerLimitInput
+                          id="torrent-live-max-connections"
+                          label="Max connected peers"
+                          value={liveMaxConnections}
+                          placeholder={profilePeers}
+                          invalid={liveMaxConnectionsValue === undefined}
+                          describedBy="torrent-live-limit-hint"
+                          onChange={(value) => {
+                            setLiveMaxConnections(value)
+                            setLimitsError(null)
+                            setLimitsFeedback(null)
+                          }}
+                        />
+                        <div className="torrent-live-limit-actions">
+                          <p id="torrent-live-limit-hint" className="torrent-live-limit-hint">
+                            Blank inherits global:{' '}
+                            {effectiveRateLabel(null, settings.maxDownloadRateBytesPerSecond)} down
+                            · {effectiveRateLabel(null, settings.maxUploadRateBytesPerSecond)} up ·{' '}
+                            {profilePeers} peers max. Enter 0 for unlimited speed.
+                          </p>
+                          <button
+                            type="button"
+                            className="button button--ghost button--small"
+                            onClick={useLimitDefaults}
+                            disabled={applyingLimits}
+                          >
+                            Use defaults
+                          </button>
+                          <button
+                            type="button"
+                            className="button button--secondary button--small"
+                            onClick={cancelLiveLimits}
+                            disabled={applyingLimits}
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            className="button button--primary button--small"
+                            onClick={() => void saveLiveLimits()}
+                            disabled={
+                              applyingLimits || !liveLimitsDirty || liveValidationMessage !== null
+                            }
+                          >
+                            {applyingLimits ? 'Applying…' : 'Apply limits'}
+                          </button>
+                        </div>
+                        {liveValidationMessage ? (
+                          <p className="inline-error torrent-live-limit-message" role="alert">
+                            {liveValidationMessage}
+                          </p>
+                        ) : null}
+                        {limitsError ? (
+                          <p className="inline-error torrent-live-limit-message" role="alert">
+                            {limitsError}
+                          </p>
+                        ) : null}
+                        {limitsFeedback ? (
+                          <p className="torrent-live-limit-success" role="status">
+                            {limitsFeedback}
+                          </p>
+                        ) : null}
                       </div>
                     ) : null}
                   </section>
@@ -1330,7 +1631,27 @@ export function TorrentsPage({
                         }
                       />
                     ) : null}
-                    {detailTab === 'peers' ? <PeerList peers={selectedDetails.peers} /> : null}
+                    {detailTab === 'peers' ? (
+                      <PeerList
+                        peers={selectedDetails.peers}
+                        sortKey={peerSortKey}
+                        sortDirection={peerSortDirection}
+                        onSort={(key) => {
+                          if (key === peerSortKey) {
+                            setPeerSortDirection((direction) =>
+                              direction === 'asc' ? 'desc' : 'asc',
+                            )
+                          } else {
+                            setPeerSortKey(key)
+                            setPeerSortDirection(
+                              key === 'progress' || key === 'download' || key === 'upload'
+                                ? 'desc'
+                                : 'asc',
+                            )
+                          }
+                        }}
+                      />
+                    ) : null}
                     {detailTab === 'trackers' ? (
                       <TrackerList trackers={selectedDetails.trackers} />
                     ) : null}
@@ -1345,7 +1666,7 @@ export function TorrentsPage({
                     <div className="torrent-danger-zone">
                       <button
                         type="button"
-                        className="link-button torrent-remove-link"
+                        className="button button--danger button--small"
                         onClick={() => {
                           const message =
                             selected.status === 'seeding'
@@ -1354,7 +1675,7 @@ export function TorrentsPage({
                           if (window.confirm(message)) onCancelJob(selected.id)
                         }}
                       >
-                        Remove torrent
+                        <Icon name="trash" size={14} /> Remove torrent
                       </button>
                     </div>
                   ) : null}

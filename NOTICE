@@ -1,0 +1,13 @@
+NexFetch
+Copyright 2026 Shubhabrata Ghosh
+
+This product includes software developed by third parties. Runtime and build
+dependencies retain their own licenses; see package-lock.json, resources/README.md,
+and the upstream projects for details.
+
+Bundled runtime components (distributed with release builds only):
+
+- yt-dlp — Unlicense — https://github.com/yt-dlp/yt-dlp
+- FFmpeg (LGPL build) — LGPL-3.0-or-later — https://ffmpeg.org / https://github.com/BtbN/FFmpeg-Builds
+- libtorrent (Rasterbar) — BSD-3-Clause — https://libtorrent.org
+- PyInstaller bootloader — GPL-2.0-or-later with a special exception — https://pyinstaller.org

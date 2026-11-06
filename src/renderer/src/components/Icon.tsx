@@ -9,6 +9,7 @@ export type IconName =
   | 'stop'
   | 'pause'
   | 'play'
+  | 'trash'
   | 'x'
   | 'sun'
   | 'moon'
@@ -114,6 +115,16 @@ export function Icon({ name, size = 18, className }: IconProps) {
       return (
         <svg {...common}>
           <path d="m8 5 11 7-11 7z" />
+        </svg>
+      )
+    case 'trash':
+      return (
+        <svg {...common}>
+          <path d="M4 7h16" />
+          <path d="M9 7V4h6v3" />
+          <path d="m6 7 1 14h10l1-14" />
+          <path d="M10 11v6" />
+          <path d="M14 11v6" />
         </svg>
       )
     case 'x':

@@ -113,6 +113,7 @@ export interface DownloadEngine {
     job: DownloadJob,
     downloadLimitBytesPerSecond: number | null,
     uploadLimitBytesPerSecond: number | null,
+    maxConnections: number | null,
   ): Promise<void>
   findMorePeers?(job: DownloadJob): Promise<void>
   verify?(job: DownloadJob): Promise<void>

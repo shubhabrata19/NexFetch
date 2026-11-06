@@ -154,6 +154,20 @@ def clean_text(value: Optional[str], limit: int = 300) -> Optional[str]:
     return text[:limit] if text else None
 
 
+def peer_client_name(value: Any) -> str:
+    if isinstance(value, bytes):
+        text = value.decode("utf-8", "replace")
+    else:
+        text = str(value or "")
+    # libtorrent may expose bytes, and some paths stringify them as b'...'.
+    if text.startswith("b'") and text.endswith("'"):
+        text = text[2:-1]
+    text = re.sub(r"\\x[0-9a-fA-F]{2}", "", text)
+    text = "".join(character for character in text if character.isprintable())
+    text = text.strip()
+    return text[:80] or "Unknown"
+
+
 def is_private_address(value: str) -> bool:
     try:
         address = ipaddress.ip_address(value)
@@ -538,7 +552,7 @@ def peer_entries(handle: Any) -> List[Dict[str, Any]]:
             peers.append(
                 {
                     "address": address,
-                    "client": clean_text(str(getattr(peer, "client", "")), 80) or "Unknown",
+                    "client": peer_client_name(getattr(peer, "client", "")),
                     "progress": float(getattr(peer, "progress", 0.0) or 0.0),
                     "downloadRateBytesPerSecond": int(getattr(peer, "down_speed", 0) or 0),
                     "uploadRateBytesPerSecond": int(getattr(peer, "up_speed", 0) or 0),
@@ -601,6 +615,9 @@ class TorrentRuntime:
         self.last_state = ""
         self.download_limit = as_int(options.get("downloadLimitBytesPerSecond"), 0) or 0
         self.upload_limit = as_int(options.get("uploadLimitBytesPerSecond"), 0) or 0
+        self.max_connections_override = max(
+            0, min(1000, as_int(options.get("maxConnections"), 0) or 0)
+        )
         self.seed_after_complete = as_bool(options.get("seedAfterComplete"), False)
         self.selected: set[int] = set(as_int_list(options.get("fileIndices")))
         self.trackers: List[Dict[str, Any]] = []
@@ -853,7 +870,10 @@ class Session:
                 add_params.ti = ti
                 add_params.save_path = str(params.get("savePath", ""))
                 add_params.flags &= ~lt.torrent_flags.paused
-                add_params.max_connections = int(
+                max_connections_override = max(
+                    0, min(1000, as_int(params.get("maxConnections"), 0) or 0)
+                )
+                add_params.max_connections = max_connections_override or int(
                     self.settings.get("perTorrentConnections", 100) or 100
                 )
                 download_limit = as_int(params.get("downloadLimitBytesPerSecond"), 0) or 0
@@ -1285,6 +1305,7 @@ class Session:
             "peers": peer_entries(handle) if include_peers else [],
             "downloadLimitBytesPerSecond": runtime.download_limit or None,
             "uploadLimitBytesPerSecond": runtime.upload_limit or None,
+            "maxConnections": runtime.max_connections_override or None,
             "seedAfterComplete": runtime.seed_after_complete,
             "discovery": {
                 "dht": not bool(ti.priv()) if ti is not None else True,
@@ -1314,11 +1335,19 @@ class Session:
     def _apply_limits(self, runtime: TorrentRuntime, params: Dict[str, Any]) -> None:
         download_limit = as_int(params.get("downloadLimitBytesPerSecond"), 0) or 0
         upload_limit = as_int(params.get("uploadLimitBytesPerSecond"), 0) or 0
+        max_connections_override = max(
+            0, min(1000, as_int(params.get("maxConnections"), 0) or 0)
+        )
+        effective_max_connections = max_connections_override or int(
+            self.settings.get("perTorrentConnections", 100) or 100
+        )
         runtime.download_limit = download_limit
         runtime.upload_limit = upload_limit
+        runtime.max_connections_override = max_connections_override
         try:
             runtime.handle.set_download_limit(download_limit)
             runtime.handle.set_upload_limit(upload_limit)
+            runtime.handle.set_max_connections(effective_max_connections)
         except Exception:
             pass
 

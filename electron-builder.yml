@@ -16,6 +16,8 @@ extraResources:
     to: assets
     filter:
       - nexfetch_icon.png
+  - from: resources/binaries.manifest.json
+    to: binaries.manifest.json
 asar: true
 npmRebuild: false
 win:

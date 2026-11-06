@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-11-06",
+  "notes": "Pinned runtime binaries. Downloads are verified against these SHA-256 values by scripts/fetch-win-binaries.ps1 and again at application startup. Update this file through a reviewed pull request when bumping a version.",
+  "platforms": {
+    "win32-x64": {
+      "yt-dlp": {
+        "file": "yt-dlp.exe",
+        "version": "2026.10.26",
+        "sha256": "f5389d3698ecde4ef06f4e6b1ce0294fe9ac1396228c8990b8d3416d6d177a7d",
+        "url": "https://github.com/yt-dlp/yt-dlp/releases/download/2026.10.26/yt-dlp.exe",
+        "source": "https://github.com/yt-dlp/yt-dlp",
+        "license": "Unlicense"
+      },
+      "ffmpeg": {
+        "file": "ffmpeg.exe",
+        "version": "n9.0.2-47-gb204e94e90-20261105",
+        "sha256": "a502236803095e00ca2b6febf4617c10018198bbc52bb29401653859d000fe62",
+        "archive": {
+          "name": "ffmpeg-n9.0-latest-win64-lgpl-9.0.zip",
+          "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n9.0-latest-win64-lgpl-9.0.zip",
+          "sha256": "3ef1842c32bb9a6fb72d4edc5df8c9ecde66ebf84b6f1f35c0e5ac8e4a68b5f1",
+          "member": "ffmpeg-n9.0-latest-win64-lgpl-9.0/bin/ffmpeg.exe"
+        },
+        "source": "https://github.com/BtbN/FFmpeg-Builds",
+        "license": "LGPL-3.0-or-later"
+      },
+      "ffprobe": {
+        "file": "ffprobe.exe",
+        "version": "n9.0.2-47-gb204e94e90-20261105",
+        "sha256": "5c0a9c0a54571b188b19d995d15bdd2daeef68a72dbe9255a4f2418a32e342e5",
+        "archive": {
+          "name": "ffmpeg-n9.0-latest-win64-lgpl-9.0.zip",
+          "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n9.0-latest-win64-lgpl-9.0.zip",
+          "sha256": "3ef1842c32bb9a6fb72d4edc5df8c9ecde66ebf84b6f1f35c0e5ac8e4a68b5f1",
+          "member": "ffmpeg-n9.0-latest-win64-lgpl-9.0/bin/ffprobe.exe"
+        },
+        "source": "https://github.com/BtbN/FFmpeg-Builds",
+        "license": "LGPL-3.0-or-later"
+      },
+      "torrent-helper": {
+        "file": "nexfetch-torrent-helper.exe",
+        "version": null,
+        "sha256": null,
+        "build": "scripts/build-torrent-helper.ps1",
+        "source": "https://github.com/arvidn/libtorrent",
+        "license": "BSD-3-Clause (libtorrent); GPL-2.0-or-later with exception (PyInstaller bootloader)",
+        "note": "Built locally with PyInstaller from the pinned requirements.txt. Builds are not reproducible enough to publish a stable hash, so presence is checked but the binary is not hash-pinned."
+      }
+    }
+  }
+}

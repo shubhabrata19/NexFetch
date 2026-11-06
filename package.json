@@ -1,10 +1,14 @@
 {
   "name": "nexfetch",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "NexFetch — a modern universal download manager for desktop",
   "private": true,
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "author": "Shubhabrata Ghosh",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/shubhabrata19/NexFetch.git"
+  },
   "main": "./out/main/index.js",
   "engines": {
     "node": ">=24.0.0"
@@ -23,6 +27,9 @@
     "icons": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/generate-icons.ps1",
     "test": "vitest run",
     "test:watch": "vitest",
+    "verify:manifest": "node scripts/verify-binaries.mjs --manifest-only",
+    "verify:binaries": "node scripts/verify-binaries.mjs",
+    "release:checksums": "node scripts/write-release-checksums.mjs",
     "postinstall": "node scripts/ensure-electron.cjs",
     "package": "npm run build && electron-builder --dir",
     "package:win": "npm run build && electron-builder --win",
@@ -51,5 +58,8 @@
     "typescript-eslint": "^8.72.1",
     "vite": "^8.3.5",
     "vitest": "^5.0.5"
+  },
+  "overrides": {
+    "minimatch@>=7.0.0 <11.0.1": "11.0.5"
   }
 }

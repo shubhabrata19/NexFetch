@@ -33,12 +33,14 @@ export const httpSelectionSchema = z
   .strict()
 
 const rateLimitSchema = z.number().int().min(0).max(1_000_000_000).nullable()
+const peerLimitSchema = z.number().int().min(1).max(1000).nullable()
 
 export const torrentSelectionSchema = z
   .object({
     fileIndices: z.array(z.number().int().min(0).max(50_000)).max(50_000),
     downloadLimitBytesPerSecond: rateLimitSchema.optional(),
     uploadLimitBytesPerSecond: rateLimitSchema.optional(),
+    maxConnections: peerLimitSchema.optional(),
     seedAfterComplete: z.boolean().optional(),
   })
   .strict()
@@ -48,6 +50,7 @@ export const torrentLimitsRequestSchema = z
     jobId: z.string().min(1).max(100),
     downloadLimitBytesPerSecond: rateLimitSchema,
     uploadLimitBytesPerSecond: rateLimitSchema,
+    maxConnections: peerLimitSchema,
   })
   .strict()
 
@@ -58,6 +61,7 @@ export const torrentSetupUpdateSchema = z
     fileIndices: z.array(z.number().int().min(0).max(50_000)).max(50_000),
     downloadLimitBytesPerSecond: rateLimitSchema,
     uploadLimitBytesPerSecond: rateLimitSchema,
+    maxConnections: peerLimitSchema,
     seedAfterComplete: z.boolean(),
   })
   .strict()

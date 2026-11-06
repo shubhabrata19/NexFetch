@@ -1,20 +1,20 @@
 ---
 name: modern-desktop-ui
-description: Design a modern, accessible NexFetch desktop experience that starts with YouTube downloads and evolves into a unified multi-engine download queue.
+description: Design a modern, accessible NexFetch desktop experience for a unified multi-engine download queue.
 compatibility: opencode
 ---
 
 # NexFetch modern desktop UI
 
 ## Product principle
-NexFetch should feel calm, trustworthy, fast to understand, and task-focused. Functionality and clarity come before visual effects. The brand is a universal download manager; the first screen is focused on the YouTube MVP.
+NexFetch should feel calm, trustworthy, fast to understand, and task-focused. Functionality and clarity come before visual effects. The app is a universal download manager with YouTube, Direct file, and Torrent tabs.
 
-## MVP primary flow
+## Primary YouTube flow
 **Paste YouTube URL → Fetch details → Inspect formats → Select quality → Download**
 
 Keep this flow obvious. Do not require account creation or an onboarding wizard.
 
-## YouTube MVP layout
+## Downloads layout
 - Persistent left navigation with the NexFetch brand, Downloads/History/Settings, active-download module, system status, version, and theme toggle.
 - Paste-friendly URL field, clear validation, and fetch action.
 - Video preview with thumbnail, title, channel, duration, and source URL.
@@ -25,8 +25,8 @@ Keep this flow obvious. Do not require account creation or an onboarding wizard.
 - Status uses semantic color plus a text label. Downloading status gets a gentle continuous pulse that stops under reduced motion.
 - Clear confirmation happens inline inside the card with alert, confirm, and cancel icons; never use a blocking native dialog.
 
-## Universal-manager evolution
-When generic HTTP and BitTorrent engines are implemented, introduce a unified downloads area with filters such as All, Files, Videos, and Torrents. Reuse the common job card/list but show engine-specific details only for relevant jobs. Torrent details may include peers, seeds, verification, and seeding state. HTTP details may include source host, content length, and resume support. Video details may include selected resolution/container. Never display capabilities that an adapter does not support.
+## Universal-manager surface
+The unified downloads area is implemented with All, Files, Videos, and Torrents filters. Reuse the common job card/list but show engine-specific details only for relevant jobs. Torrent details may include peers, seeds, verification, discovery, and seeding state. HTTP details may include source host, content length, resume support, and checksums. Video details may include selected resolution/container. Never display capabilities that an adapter does not support.
 
 ## Interaction rules
 - Disable actions only when prerequisites are missing and explain why.
@@ -55,5 +55,5 @@ Use a restrained, consistent design system: readable typography, consistent spac
 - Empty/loading/success/no-results/error states exist.
 - No visible control is inert.
 - Keyboard-only operation works for the core flow.
-- Future-engine controls are hidden until implemented.
+- Engine-specific controls appear only for jobs whose engine supports them.
 - Layout works at practical desktop window sizes.
