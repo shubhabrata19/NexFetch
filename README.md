@@ -6,6 +6,8 @@ engines.
 
 Licensed under the Apache License 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
 
+[![CI](https://github.com/shubhabrata19/NexFetch/actions/workflows/ci.yml/badge.svg)](https://github.com/shubhabrata19/NexFetch/actions/workflows/ci.yml)
+
 This repository currently contains the **universal manager core** with three
 working engines:
 
@@ -74,6 +76,8 @@ Magnet links are intentionally not accepted. BitTorrent input is a local
   responsive sidebar collapse, and visually hidden scrollbars that preserve wheel
   and keyboard scrolling.
 - Structured local JSON logging with redaction and rotation.
+- Pinned, SHA-256-verified runtime binaries with startup enforcement.
+- GitHub Actions CI, CodeQL scanning, and Dependabot updates.
 - Windows packaging with bundled runtime binaries.
 
 Not implemented yet:
@@ -153,33 +157,59 @@ npm run check        # typecheck + lint + tests
 npm run typecheck
 npm run lint
 npm run test
+npm run verify:manifest  # validate the pinned binary manifest
+npm run verify:binaries  # verify installed binaries against the manifest
 npm run format       # format the repository
 npm run format:check # verify formatting
 npm run build        # production build into out/
 npm run package      # unpacked application with resources
 npm run package:win  # Windows installer
 npm run build:torrent-helper # build the libtorrent helper executable
+npm run release:checksums -- release/<version> # write SHA256SUMS.txt
 npm run icons        # regenerate platform icons
 ```
 
 ## Release build
 
-The current Windows review build is produced with:
+Binary builds are currently **unsigned previews**. They are suitable for
+technical testing only and must not be presented as a stable public release.
+The full policy and checklist are in [docs/release-process.md](docs/release-process.md).
 
 ```bash
+npm run check
+npm run fetch:win-binaries
+npm run verify:binaries -- --require-installed
 npx electron-builder --win nsis -c.directories.output=release/v0.5.0-polish
+npm run release:checksums -- release/v0.5.0-polish
 ```
 
 Outputs:
 
 ```text
 release/v0.5.0-polish/NexFetch Setup 0.5.0.exe
+release/v0.5.0-polish/SHA256SUMS.txt
 release/v0.5.0-polish/win-unpacked/NexFetch.exe
 ```
 
-The installer is currently unsigned, so Windows SmartScreen may warn. The
-packaged application includes the runtime binaries from `resources/bin` and the
-brand asset from `resources/assets`.
+The installer is unsigned, so Windows SmartScreen will warn about an unknown
+publisher. Publish preview artifacts only as a GitHub pre-release, always attach
+`SHA256SUMS.txt`, and include the unsigned warning. Do not distribute macOS
+binaries until Developer ID signing and notarization are available.
+
+### Verify a download
+
+Windows:
+
+```powershell
+certutil -hashfile "NexFetch Setup 0.5.0.exe" SHA256
+```
+
+Compare the result with `SHA256SUMS.txt` from the same release. On macOS/Linux,
+run `sha256sum -c SHA256SUMS.txt`. A checksum mismatch means the file is not the
+published build and should not be run.
+
+The packaged application includes the verified runtime binaries from
+`resources/bin` and the brand asset from `resources/assets`.
 
 ## Interface
 
@@ -332,8 +362,7 @@ The torrent client is implemented. The remaining release work is:
 
 1. Run packaged-app smoke tests on Windows, macOS, and Linux, including automatic
    JSON-to-SQLite migration and the bundled torrent helper.
-2. Add code signing and a reproducible release workflow for the Electron app and
-   the torrent helper.
+2. Add code signing/notarization and a tag-driven signed release workflow.
 3. Harden large-swarm resource use, sleep/network-change recovery, and
    cross-platform libtorrent packaging.
 4. Add automated end-to-end tests with a local legal swarm; keep public swarms out

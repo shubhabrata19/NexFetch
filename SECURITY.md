@@ -71,3 +71,21 @@ Good-faith security research that follows this policy is welcome. We will not
 pursue legal action for accidental, good-faith violations of this policy,
 provided you do not access data that is not yours, do not degrade other users'
 experience, and report findings privately.
+
+## Maintainer repository settings
+
+These GitHub settings complement the workflows in this repository and should
+stay enabled:
+
+- Private vulnerability reporting (Security tab).
+- Secret scanning and push protection.
+- Dependabot alerts and security updates, plus the scheduled update configs in
+  `.github/dependabot.yml`.
+- CodeQL analysis from `.github/workflows/codeql.yml` and the CI checks from
+  `.github/workflows/ci.yml`.
+- Branch protection on `main`: required CI and CodeQL checks, at least one
+  review, no force pushes.
+- The unsigned-preview policy in `docs/release-process.md`; binary releases
+  remain pre-releases until code signing and notarization are available.
+- GitHub Actions are pinned by commit SHA. Update them through reviewed
+  Dependabot pull requests, not floating tags.

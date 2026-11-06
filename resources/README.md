@@ -59,6 +59,13 @@ Verification happens twice:
 2. `DependencyService` hashes bundled pinned binaries at startup and refuses to
    run one whose SHA-256 does not match the manifest.
 
+Check the manifest and any installed binaries before packaging:
+
+```bash
+npm run verify:manifest
+npm run verify:binaries -- --require-installed
+```
+
 The torrent helper is built locally with PyInstaller. Its build is not
 reproducible enough for a stable published hash, so its manifest entry has
 `"sha256": null`: presence is checked, but it is not hash-pinned. Its Python
