@@ -57,8 +57,8 @@ NexFetch is a local-only desktop application:
 
 - No accounts, telemetry, analytics, or cloud backend.
 - The renderer runs sandboxed with context isolation and no Node.js access.
-- The main process treats renderer messages, remote URLs, HTTP headers, and
-  BitTorrent metadata as untrusted input.
+- The main process treats renderer messages, remote URLs, HTTP headers,
+  BitTorrent metadata, and magnet URIs as untrusted input.
 - Pinned media tools (yt-dlp, FFmpeg, ffprobe) are SHA-256 verified against
   `resources/binaries.manifest.json`; a modified binary is refused. The locally
   built torrent helper is presence-checked but not hash-pinned because its

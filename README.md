@@ -38,9 +38,9 @@
 
 ## What it does
 
-| ▶️ YouTube                                                                                                                                               | 🌐 Direct files                                                                                                                                                         | 📦 BitTorrent                                                                                                                                                  |
-| :------------------------------------------------------------------------------------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Actual formats up to **2160p**<br />Best-up-to-4K, manual, or audio-only<br />FFmpeg merge + ffprobe verification<br />Parallel fragments and speed caps | HEAD-first probing, bounded redirects<br />Range resume with ETag/Last-Modified checks<br />Optional SHA-256 verification<br />Pause/resume and conflict-safe filenames | `.torrent` files and v1/v2 info hashes<br />Metadata-only DHT lookup<br />File selection, peers, trackers, verification<br />Explicit, user-controlled seeding |
+| ▶️ YouTube                                                                                                                                               | 🌐 Direct files                                                                                                                                                         | 📦 BitTorrent                                                                                                                                                             |
+| :------------------------------------------------------------------------------------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Actual formats up to **2160p**<br />Best-up-to-4K, manual, or audio-only<br />FFmpeg merge + ffprobe verification<br />Parallel fragments and speed caps | HEAD-first probing, bounded redirects<br />Range resume with ETag/Last-Modified checks<br />Optional SHA-256 verification<br />Pause/resume and conflict-safe filenames | `.torrent` files, v1/v2 info hashes, magnet links<br />Metadata-only DHT lookup<br />File selection, peers, trackers, verification<br />Explicit, user-controlled seeding |
 
 One queue, one history, and one SQLite database power all three engines. Torrent
 metadata is sanitized before use, downloads are confined to the destination you
@@ -134,7 +134,7 @@ Security issues should be reported privately — see [SECURITY.md](SECURITY.md).
 | ------------ | ------------------------------------------------------------------------------- | -------------------------------------------------------------- |
 | YouTube      | Watch, `youtu.be`, Shorts, live links, embed, mobile, Music, `youtube-nocookie` | Playlists, channels, search pages, private/members-only videos |
 | Direct files | `http://` and `https://` links                                                  | Links with embedded credentials, HTML pages                    |
-| BitTorrent   | `.torrent` files, v1/v2 info hashes (DHT metadata lookup)                       | Magnet links, torrent search/indexing                          |
+| BitTorrent   | `.torrent` files, v1/v2 info hashes, magnet links (local parse)                 | Torrent search/indexing                                        |
 
 NexFetch does not bypass DRM, paywalls, private-video restrictions, or geo-blocks.
 Only download content you own or are permitted to download.

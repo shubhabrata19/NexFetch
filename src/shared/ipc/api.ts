@@ -58,7 +58,7 @@ export interface NexFetchApi {
       name: string,
       dataBase64: string,
     ): Promise<Result<TorrentPreviewEnvelope>>
-    lookup(infoHash: string): Promise<Result<DownloadJob>>
+    lookup(source: string): Promise<Result<DownloadJob>>
     cancelPreview(requestId: string): Promise<Result<null>>
   }
   jobs: {

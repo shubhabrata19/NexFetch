@@ -13,7 +13,7 @@ Use the `desktop-quality-release` and `universal-download-manager` skills. Inspe
 - Actual format listing, no formats, unknown file size, formats above 2160p excluded.
 - Best-up-to-4K selection, manual selection, and audio-only when supported.
 - HTTP probes, redirect handling, Range/resume detection, unknown content length, HTML rejection, filename conflicts, optional checksums, and cancellation.
-- Torrent `.torrent` and info-hash metadata lookup, file selection, malicious filenames, path containment, tracker validation, seeding controls, limits, and shutdown. Magnet links are intentionally rejected.
+- Torrent `.torrent` and info-hash metadata lookup, magnet parsing (hash, display name, trackers), file selection, malicious filenames, path containment, tracker validation, seeding controls, limits, and shutdown.
 - Missing/outdated `yt-dlp`, missing FFmpeg, or missing torrent helper.
 - Queue lifecycle, progress, cancellation, retry, process failure, and partial-output cleanup.
 

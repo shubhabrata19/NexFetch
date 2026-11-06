@@ -36,8 +36,8 @@ function decodeBase32(value: string): string | null {
  *  - 64 hex characters (BitTorrent v2)
  *  - optional urn:btih: / urn:btmh: prefixes
  *
- * Magnet links are intentionally not accepted here. The UI resolves an info
- * hash through DHT and never exposes magnet input.
+ * Magnet URIs are not info hashes; parse them with parseTorrentSource() in
+ * torrent-magnet.ts. This function intentionally returns null for magnet input.
  */
 export function parseTorrentInfoHash(input: string): ParsedTorrentInfoHash | null {
   let value = input.trim()

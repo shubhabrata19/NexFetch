@@ -53,7 +53,7 @@ const api: NexFetchApi = {
     previewFile: (path, requestId) => invoke(IPC.torrentPreviewFile, { path, requestId }),
     previewBytes: (requestId, name, dataBase64) =>
       invoke(IPC.torrentPreviewBytes, { requestId, name, dataBase64 }),
-    lookup: (infoHash) => invoke(IPC.torrentLookup, { infoHash }),
+    lookup: (source) => invoke(IPC.torrentLookup, { source }),
     cancelPreview: (requestId) => invoke(IPC.torrentCancelPreview, { requestId }),
   },
   jobs: {

@@ -15,7 +15,7 @@ import type {
   TorrentResolvedSelection,
   TorrentResolveProgress,
 } from '@shared/domain/torrent'
-import { parseTorrentInfoHash } from '@shared/domain/torrent-hash'
+import { parseTorrentSource } from '@shared/domain/torrent-magnet'
 import { defaultTorrentDestination, torrentFolderName } from '@shared/domain/torrent-paths'
 import type { CreateJobRequest, TorrentSetupUpdateRequest } from '@shared/ipc/contracts'
 import type { EngineRegistry } from '../engines/registry'
@@ -61,6 +61,7 @@ export interface TorrentMetadataProvider {
     hashVersion: 1 | 2,
     signal: AbortSignal,
     onProgress: (progress: TorrentResolveProgress) => void,
+    options?: { trackers?: string[]; sourceKind?: 'infohash' | 'magnet' },
   ): Promise<{ preview: TorrentPreview; metadataPath: string }>
   createSelection(preview: TorrentPreview, metadataPath: string): EngineSelection
 }
@@ -142,12 +143,12 @@ export class DownloadManager {
     return job ? toJobView(job) : null
   }
 
-  async startMetadataLookup(rawInfoHash: string): Promise<DownloadJob> {
-    const parsed = parseTorrentInfoHash(rawInfoHash)
+  async startMetadataLookup(rawSource: string): Promise<DownloadJob> {
+    const parsed = parseTorrentSource(rawSource)
     if (!parsed) {
       throw new DomainError(
         'TORRENT_INVALID',
-        'Enter a valid v1 (40 hex / 32 base32) or v2 (64 hex) info hash.',
+        'Enter a valid v1 (40 hex / 32 base32) or v2 (64 hex) info hash or a magnet link.',
       )
     }
     if (!this.options.torrentMetadata) {
@@ -176,7 +177,8 @@ export class DownloadManager {
 
     const settings = this.options.settings.get()
     const now = new Date().toISOString()
-    const title = `${parsed.infoHash.slice(0, 12)}…`
+    const sourceKind = parsed.kind === 'magnet' ? 'magnet' : 'infohash'
+    const title = parsed.displayName ?? `${parsed.infoHash.slice(0, 12)}…`
     const details: TorrentJobDetails = {
       engineId: 'torrent',
       infoHash: parsed.infoHash,
@@ -225,7 +227,7 @@ export class DownloadManager {
         kind: 'torrent',
         infoHash: parsed.infoHash,
         hashVersion: parsed.version,
-        sourceKind: 'infohash',
+        sourceKind,
         displayName: title,
       },
       title,
@@ -243,6 +245,7 @@ export class DownloadManager {
       scheduledAt: null,
       selection: null,
       workspaceDirectory: null,
+      lookupTrackers: parsed.trackers.length > 0 ? parsed.trackers : null,
     }
 
     this.options.jobs.save(job)
@@ -1001,6 +1004,13 @@ export class DownloadManager {
             this.options.jobs.save(current)
           }
         },
+        {
+          trackers: job.lookupTrackers ?? [],
+          sourceKind:
+            job.source.kind === 'torrent' && job.source.sourceKind === 'magnet'
+              ? 'magnet'
+              : 'infohash',
+        },
       )
 
       if (this.shuttingDown || controller.signal.aborted) return
@@ -1009,12 +1019,14 @@ export class DownloadManager {
 
       const selection = provider.createSelection(result.preview, result.metadataPath)
       const settings = this.options.settings.get()
+      const magnetSource =
+        current.source.kind === 'torrent' && current.source.sourceKind === 'magnet'
       current.title = result.preview.title
       current.source = {
         kind: 'torrent',
         infoHash: result.preview.infoHash,
         hashVersion: result.preview.hashVersion,
-        sourceKind: 'infohash',
+        sourceKind: magnetSource ? 'magnet' : 'infohash',
         displayName: result.preview.title,
       }
       current.destination = defaultTorrentDestination(

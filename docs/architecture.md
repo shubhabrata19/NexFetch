@@ -67,6 +67,9 @@ details.
   the torrent helper.
 - yt-dlp receives only a canonical `https://www.youtube.com/watch?v=<id>` URL
   derived from a host-validated input.
+- Magnet URIs are parsed locally. Only the canonical info hash, a sanitized
+  display name, and scheme-filtered trackers cross the process boundary; the
+  helper rejects trackers that resolve to private or local hosts.
 - The torrent helper is spawned by the main process and communicates over
   stdin/stdout only. It has no sockets, HTTP API, or web UI.
 - Bundled yt-dlp/FFmpeg/ffprobe binaries are pinned in

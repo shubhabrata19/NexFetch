@@ -331,8 +331,8 @@ export default function App() {
   )
 
   const lookupTorrent = useCallback(
-    async (infoHash: string): Promise<DownloadJob | null> => {
-      const result = await window.nexfetch.torrent.lookup(infoHash)
+    async (source: string): Promise<DownloadJob | null> => {
+      const result = await window.nexfetch.torrent.lookup(source)
       if (!result.ok) {
         showToast('error', result.error.message)
         return null

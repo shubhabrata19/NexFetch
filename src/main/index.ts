@@ -433,8 +433,14 @@ if (!gotSingleInstanceLock) {
         previews: previewCache,
         logger: appLogger,
         torrentMetadata: {
-          resolve: (infoHash, hashVersion, signal, onProgress) =>
-            torrentPreview.resolveInfoHashMetadata(infoHash, hashVersion, signal, onProgress),
+          resolve: (infoHash, hashVersion, signal, onProgress, options) =>
+            torrentPreview.resolveInfoHashMetadata(
+              infoHash,
+              hashVersion,
+              signal,
+              onProgress,
+              options,
+            ),
           createSelection: (preview, metadataPath) =>
             torrentEngine.createSetup(preview, metadataPath),
         },

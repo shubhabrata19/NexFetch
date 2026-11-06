@@ -44,7 +44,7 @@ export interface HelperPreview {
   hashVersion: 1 | 2
   isPrivate: boolean
   trackers: TorrentTrackerEntry[]
-  sourceKind: 'file' | 'infohash'
+  sourceKind: 'file' | 'infohash' | 'magnet'
   createdAt: string | null
   createdBy: string | null
   comment: string | null

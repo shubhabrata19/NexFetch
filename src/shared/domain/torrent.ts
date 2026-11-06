@@ -1,5 +1,5 @@
 export type TorrentHashVersion = 1 | 2
-export type TorrentSourceKind = 'file' | 'infohash'
+export type TorrentSourceKind = 'file' | 'infohash' | 'magnet'
 
 export interface TorrentFileEntry {
   index: number

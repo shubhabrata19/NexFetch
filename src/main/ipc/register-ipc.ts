@@ -377,7 +377,7 @@ export function registerIpc(dependencies: IpcDependencies): () => void {
   })
 
   handle(IPC.torrentLookup, torrentLookupRequestSchema, (request) =>
-    downloadManager.startMetadataLookup(request.infoHash),
+    downloadManager.startMetadataLookup(request.source),
   )
 
   handle(IPC.torrentCancelPreview, torrentCancelPreviewSchema, ({ requestId }) => {

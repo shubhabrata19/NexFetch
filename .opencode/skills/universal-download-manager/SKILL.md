@@ -12,7 +12,7 @@ NexFetch is a desktop application for multiple lawful download types. YouTube (u
 Plan for independent adapters:
 - **HTTP/HTTPS:** direct file downloads, redirects, server capability detection, Range-based resume where supported, content length when known, and optional checksum verification.
 - **Video platforms:** extractor-backed metadata/format discovery and downloads; begin with YouTube using `yt-dlp` and FFmpeg where needed.
-- **BitTorrent:** user-supplied `.torrent` files and v1/v2 info hashes, metadata-only DHT lookup, piece verification, peer/seed stats, cancellation, and explicit user-controlled seeding. Magnet links are intentionally not accepted.
+- **BitTorrent:** user-supplied `.torrent` files, v1/v2 info hashes, and magnet links (parsed locally), metadata-only DHT/tracker lookup, piece verification, peer/seed stats, cancellation, and explicit user-controlled seeding.
 - **Future protocols:** add only through a well-defined adapter contract.
 
 Do not conflate a URL scheme with permission to download its content. Validate supported sources and surface unsupported/blocked cases clearly.
