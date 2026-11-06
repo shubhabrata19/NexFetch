@@ -14,8 +14,8 @@ working engines:
   optional SHA-256 verification, and unknown-length support.
 - BitTorrent through a bundled libtorrent 2.x helper: `.torrent` files and v1/v2
   info hashes, metadata-only DHT lookups, DHT/PEX/LSD, tracker tiers, file
-  selection, pause/resume, per-torrent speed limits, seeding controls, and
-  peer/tracker detail.
+  selection, pause/resume, per-torrent speed and peer limits, seeding controls,
+  and sortable peer/tracker detail.
 - SQLite-backed job and settings persistence with automatic JSON migration.
 - Real download queue with scheduling, progress, cancellation, retry,
   completion, and history filters.
@@ -159,14 +159,14 @@ npm run icons        # regenerate platform icons
 The current Windows review build is produced with:
 
 ```bash
-npx electron-builder --win nsis -c.directories.output=release/v0.5.0-lookup
+npx electron-builder --win nsis -c.directories.output=release/v0.5.0-polish
 ```
 
 Outputs:
 
 ```text
-release/v0.5.0-lookup/NexFetch Setup 0.5.0.exe
-release/v0.5.0-lookup/win-unpacked/NexFetch.exe
+release/v0.5.0-polish/NexFetch Setup 0.5.0.exe
+release/v0.5.0-polish/win-unpacked/NexFetch.exe
 ```
 
 The installer is currently unsigned, so Windows SmartScreen may warn. The
@@ -190,6 +190,12 @@ brand asset from `resources/assets`.
   Downloading, Seeding, and Completed groups; files, peers, trackers, and
   discovery tabs; seeds/peers connected-versus-available counts; live
   download/upload speed; per-torrent limits; and explicit stop-seeding controls.
+- The peer table is sortable by address, client, progress, download speed,
+  upload speed, and seed/peer type, with persistent sort state and accessible
+  sort indicators.
+- Transfer limits cover download speed, upload speed, and maximum connected
+  peers. Blank fields inherit the global speed limit or connection-profile peer
+  default; zero speed means unlimited. Applied limits persist across restart.
 - Closing the window while transfers are active offers Continue in Background
   (tray) or Close NexFetch. Unfinished downloads resume next launch; seeding
   stops and does not resume automatically.

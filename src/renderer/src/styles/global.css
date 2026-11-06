@@ -1221,6 +1221,17 @@ button:disabled {
   background: var(--surface-2);
 }
 
+.button--danger {
+  color: var(--danger);
+  background: var(--danger-soft);
+  border-color: color-mix(in srgb, var(--danger) 36%, var(--border));
+}
+
+.button--danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger-soft) 72%, var(--danger));
+  border-color: color-mix(in srgb, var(--danger) 58%, var(--border));
+}
+
 .button--small {
   padding: 8px 11px;
   font-size: 12px;
@@ -3690,6 +3701,11 @@ body:has(.page--torrents) .toast {
   border-bottom: 1px solid var(--border);
 }
 
+.torrent-detail-title {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .torrent-title-line {
   display: flex;
   flex-wrap: wrap;
@@ -3915,6 +3931,38 @@ body:has(.page--torrents) .toast {
   cursor: pointer;
 }
 
+.rate-limit-box--invalid {
+  border-color: var(--danger);
+}
+
+.rate-limit-box--invalid:focus-within {
+  box-shadow: 0 0 0 3px var(--danger-soft);
+}
+
+.peer-limit-suffix {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  height: 100%;
+  padding: 0 10px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--surface-2);
+  border-left: 1px solid var(--border);
+}
+
+.torrent-peer-limit-field {
+  max-width: 260px;
+}
+
+.torrent-field-hint {
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+
 .torrent-checkbox-row {
   display: flex;
   align-items: flex-start;
@@ -4085,18 +4133,59 @@ body:has(.page--torrents) .toast {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   margin-top: 14px;
 }
 
 .torrent-limit-summary {
+  padding: 5px 9px;
   margin-left: auto;
   color: var(--muted);
   font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
 }
 
 .torrent-live-limit-form {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding: 14px;
   margin-top: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.torrent-live-limit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  grid-column: 1 / -1;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.torrent-live-limit-hint {
+  flex: 1 1 320px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+.torrent-live-limit-message {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.torrent-live-limit-success {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--success);
+  font-size: 11.5px;
 }
 
 .torrent-detail-tabs {
@@ -4137,9 +4226,54 @@ body:has(.page--torrents) .toast {
   border-bottom: 1px solid var(--border);
 }
 
+.torrent-sort-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: left;
+  text-transform: inherit;
+  white-space: nowrap;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.torrent-sort-button:hover {
+  color: var(--text);
+}
+
+.torrent-sort-button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+.torrent-sort-indicator {
+  color: var(--muted);
+  font-size: 8px;
+  line-height: 1;
+}
+
+.torrent-sort-indicator--active {
+  color: var(--accent-text);
+}
+
 .torrent-table-row {
   font-size: 10.5px;
   border-bottom: 1px solid var(--border);
+}
+
+.torrent-table-head > [role='columnheader'],
+.torrent-table-row > [role='cell'] {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .torrent-table-row:last-child {
@@ -4204,11 +4338,6 @@ body:has(.page--torrents) .toast {
   border-top: 1px solid var(--border);
 }
 
-.torrent-remove-link {
-  color: var(--danger);
-  font-size: 11px;
-}
-
 @media (max-width: 1180px) {
   .page--torrents {
     padding-right: 20px;
@@ -4252,6 +4381,18 @@ body:has(.page--torrents) .toast {
 
   .torrent-detail {
     min-height: 0;
+  }
+
+  .torrent-live-limit-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .torrent-live-limit-actions {
+    justify-content: flex-start;
+  }
+
+  .torrent-live-limit-hint {
+    flex-basis: 100%;
   }
 }
 

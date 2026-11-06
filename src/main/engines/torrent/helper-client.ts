@@ -173,6 +173,7 @@ export class TorrentHelperClient {
     fileIndices: number[]
     downloadLimitBytesPerSecond: number | null
     uploadLimitBytesPerSecond: number | null
+    maxConnections: number | null
     seedAfterComplete: boolean
     isPrivate: boolean
   }): Promise<HelperTorrentStatus> {
@@ -207,10 +208,11 @@ export class TorrentHelperClient {
     infoHash: string,
     downloadLimitBytesPerSecond: number | null,
     uploadLimitBytesPerSecond: number | null,
+    maxConnections: number | null,
   ): Promise<HelperTorrentStatus> {
     return this.request<HelperTorrentStatus>(
       'torrent.set_limits',
-      { infoHash, downloadLimitBytesPerSecond, uploadLimitBytesPerSecond },
+      { infoHash, downloadLimitBytesPerSecond, uploadLimitBytesPerSecond, maxConnections },
       20_000,
     )
   }

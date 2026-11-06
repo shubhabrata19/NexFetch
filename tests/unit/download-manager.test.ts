@@ -9,9 +9,14 @@ import type {
   EngineCapabilities,
   EnginePreviewData,
   EngineRunContext,
+  EngineSelection,
 } from '@shared/domain/engine'
 import type { DownloadSource } from '@shared/domain/job'
-import type { TorrentPreview } from '@shared/domain/torrent'
+import type {
+  TorrentJobDetails,
+  TorrentPreview,
+  TorrentResolvedSelection,
+} from '@shared/domain/torrent'
 import { DownloadManager } from '@main/download/download-manager'
 import type { TorrentMetadataProvider } from '@main/download/download-manager'
 import { JsonJobRepository } from '@main/download/job-repository'
@@ -94,6 +99,7 @@ function createFixture(
       details: null,
       verification: null,
     }),
+    setLimits: async () => undefined,
     start: async (_job, ctx: EngineRunContext) => {
       ctx.emit({ type: 'phase', phase: 'downloading' })
       ctx.emit({ type: 'progress', downloadedBytes: 50, totalBytes: 100 })
@@ -444,6 +450,94 @@ describe('download manager', () => {
     const cancelled = await fixture.manager.cancelJob(job.id)
     expect(cancelled.status).toBe('cancelled')
     await fixture.manager.removeJob(job.id)
+    await fixture.manager.shutdown()
+  })
+
+  it('persists per-torrent transfer limits in job details and selection', async () => {
+    const fixture = createFixture('complete')
+    const details: TorrentJobDetails = {
+      engineId: 'torrent',
+      infoHash: TORRENT_HASH,
+      hashVersion: 1,
+      isPrivate: false,
+      files: [],
+      trackers: [],
+      peers: [],
+      seedsConnected: 0,
+      seedsAvailable: 0,
+      peersConnected: 0,
+      peersAvailable: 0,
+      downloadRateBytesPerSecond: 0,
+      uploadRateBytesPerSecond: 0,
+      uploadedBytes: 0,
+      ratio: 0,
+      downloadLimitBytesPerSecond: null,
+      uploadLimitBytesPerSecond: null,
+      maxConnections: null,
+      seedAfterComplete: false,
+      discovery: {
+        dht: true,
+        pex: true,
+        lsd: true,
+        natMapping: true,
+        natStatus: null,
+        listenPort: null,
+        incomingConnections: false,
+        dhtNodes: 10,
+        webSeeds: 'disabled',
+      },
+    }
+    const resolved: TorrentResolvedSelection = {
+      metadataPath: 'C:/metadata.torrent',
+      infoHash: TORRENT_HASH,
+      hashVersion: 1,
+      title: 'Limits torrent',
+      isPrivate: false,
+      fileCount: 0,
+      fileIndices: [],
+      downloadLimitBytesPerSecond: null,
+      uploadLimitBytesPerSecond: null,
+      maxConnections: null,
+      seedAfterComplete: false,
+    }
+    const selection: EngineSelection = {
+      engineId: 'torrent',
+      data: resolved,
+      requiredDependencies: [],
+      filenameBase: 'limits-torrent',
+      details,
+      verification: null,
+    }
+    fixture.jobs.save(
+      persistedJob({
+        id: 'limits-job',
+        engineId: 'fake',
+        source: {
+          kind: 'torrent',
+          infoHash: TORRENT_HASH,
+          hashVersion: 1,
+          sourceKind: 'infohash',
+          displayName: 'Limits torrent',
+        },
+        status: 'downloading',
+        details,
+        selection,
+      }),
+    )
+
+    const updated = await fixture.manager.setTorrentLimits('limits-job', 1024, 2048, 75)
+    expect(updated.details?.engineId).toBe('torrent')
+    if (updated.details?.engineId === 'torrent') {
+      expect(updated.details.downloadLimitBytesPerSecond).toBe(1024)
+      expect(updated.details.uploadLimitBytesPerSecond).toBe(2048)
+      expect(updated.details.maxConnections).toBe(75)
+    }
+
+    const persisted = fixture.jobs.get('limits-job')
+    const data = persisted?.selection?.data as TorrentResolvedSelection
+    expect(data.downloadLimitBytesPerSecond).toBe(1024)
+    expect(data.uploadLimitBytesPerSecond).toBe(2048)
+    expect(data.maxConnections).toBe(75)
     await fixture.manager.shutdown()
   })
 

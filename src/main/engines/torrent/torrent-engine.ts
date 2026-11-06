@@ -93,6 +93,7 @@ function mapStatus(status: HelperTorrentStatus): TorrentJobDetails {
     ratio: status.ratio,
     downloadLimitBytesPerSecond: status.downloadLimitBytesPerSecond,
     uploadLimitBytesPerSecond: status.uploadLimitBytesPerSecond,
+    maxConnections: status.maxConnections,
     seedAfterComplete: status.seedAfterComplete,
     discovery: status.discovery,
   }
@@ -259,6 +260,7 @@ export class TorrentEngine implements DownloadEngine {
       fileIndices: validIndices,
       downloadLimitBytesPerSecond: parsed.data.downloadLimitBytesPerSecond ?? null,
       uploadLimitBytesPerSecond: parsed.data.uploadLimitBytesPerSecond ?? null,
+      maxConnections: parsed.data.maxConnections ?? null,
       seedAfterComplete,
     }
 
@@ -280,6 +282,7 @@ export class TorrentEngine implements DownloadEngine {
       ratio: null,
       downloadLimitBytesPerSecond: resolved.downloadLimitBytesPerSecond,
       uploadLimitBytesPerSecond: resolved.uploadLimitBytesPerSecond,
+      maxConnections: resolved.maxConnections,
       seedAfterComplete,
       discovery: discoveryFor(data.isPrivate),
     }
@@ -317,6 +320,7 @@ export class TorrentEngine implements DownloadEngine {
       fileIndices: validIndices,
       downloadLimitBytesPerSecond: parsed.data.downloadLimitBytesPerSecond,
       uploadLimitBytesPerSecond: parsed.data.uploadLimitBytesPerSecond,
+      maxConnections: parsed.data.maxConnections,
       seedAfterComplete: parsed.data.seedAfterComplete,
     }
 
@@ -328,6 +332,7 @@ export class TorrentEngine implements DownloadEngine {
         files: updateFilesSelected(details.files, validIndices),
         downloadLimitBytesPerSecond: resolved.downloadLimitBytesPerSecond,
         uploadLimitBytesPerSecond: resolved.uploadLimitBytesPerSecond,
+        maxConnections: resolved.maxConnections,
         seedAfterComplete: resolved.seedAfterComplete,
       },
       filenameBase: sanitizeFilenameBase(current.title, 'torrent'),
@@ -476,6 +481,7 @@ export class TorrentEngine implements DownloadEngine {
           fileIndices: selection.fileIndices,
           downloadLimitBytesPerSecond: downloadLimit,
           uploadLimitBytesPerSecond: uploadLimit,
+          maxConnections: selection.maxConnections ?? null,
           seedAfterComplete: selection.seedAfterComplete,
           isPrivate: selection.isPrivate,
         })
@@ -505,10 +511,16 @@ export class TorrentEngine implements DownloadEngine {
     job: DownloadJob,
     downloadLimitBytesPerSecond: number | null,
     uploadLimitBytesPerSecond: number | null,
+    maxConnections: number | null,
   ): Promise<void> {
     const infoHash = (job.details as TorrentJobDetails | null)?.infoHash
     if (!infoHash) return
-    await this.helper.setLimits(infoHash, downloadLimitBytesPerSecond, uploadLimitBytesPerSecond)
+    await this.helper.setLimits(
+      infoHash,
+      downloadLimitBytesPerSecond,
+      uploadLimitBytesPerSecond,
+      maxConnections,
+    )
   }
 
   async findMorePeers(job: DownloadJob): Promise<void> {

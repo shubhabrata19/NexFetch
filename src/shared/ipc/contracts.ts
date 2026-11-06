@@ -22,6 +22,13 @@ export type Theme = 'system' | 'light' | 'dark'
 
 export type TorrentConnectionProfile = 'balanced' | 'high' | 'maximum'
 
+/** Keep these values aligned with tools/torrent-helper/nexfetch_torrent_helper.py. */
+export const TORRENT_PROFILE_PEER_LIMITS: Record<TorrentConnectionProfile, number> = {
+  balanced: 50,
+  high: 100,
+  maximum: 200,
+}
+
 export interface Settings {
   downloadDirectory: string
   maxConcurrentDownloads: number
@@ -79,6 +86,7 @@ export interface TorrentLimitsRequest {
   jobId: string
   downloadLimitBytesPerSecond: number | null
   uploadLimitBytesPerSecond: number | null
+  maxConnections: number | null
 }
 
 export interface YoutubePreviewRequest {

@@ -51,6 +51,19 @@ Asynchronous events are separate lines:
 { "event": "torrent.update", "data": { "infoHash": "...", "state": "downloading" } }
 ```
 
+## Per-torrent limits
+
+`torrent.add` and `torrent.set_limits` accept:
+
+- `downloadLimitBytesPerSecond` — zero means unlimited.
+- `uploadLimitBytesPerSecond` — zero means unlimited.
+- `maxConnections` — maximum connected peers. Zero or null uses the active
+  connection profile's per-torrent default (Balanced 50, High 100, Maximum 200).
+
+The helper applies the peer cap with libtorrent's `max_connections` and updates
+it live through `torrent.set_limits`. Peer client names are decoded and stripped
+of control characters before being sent to the UI.
+
 ## Metadata resolution
 
 `torrent.resolve_start` accepts an info hash and a metadata path. The helper adds

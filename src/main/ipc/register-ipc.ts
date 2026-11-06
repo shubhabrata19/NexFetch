@@ -399,6 +399,7 @@ export function registerIpc(dependencies: IpcDependencies): () => void {
       (request as TorrentLimitsRequest).jobId,
       (request as TorrentLimitsRequest).downloadLimitBytesPerSecond,
       (request as TorrentLimitsRequest).uploadLimitBytesPerSecond,
+      (request as TorrentLimitsRequest).maxConnections,
     ),
   )
 

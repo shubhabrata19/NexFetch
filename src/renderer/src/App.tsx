@@ -363,24 +363,25 @@ export default function App() {
   )
 
   const setTorrentLimits = useCallback(
-    (
+    async (
       jobId: string,
       downloadLimitBytesPerSecond: number | null,
       uploadLimitBytesPerSecond: number | null,
-    ): void => {
-      void (async () => {
-        const result = await window.nexfetch.jobs.setTorrentLimits({
-          jobId,
-          downloadLimitBytesPerSecond,
-          uploadLimitBytesPerSecond,
-        })
-        if (!result.ok) {
-          showToast('error', result.error.message)
-          return
-        }
-        upsertJob(result.data)
-        showToast('success', 'Torrent speed limits updated.')
-      })()
+      maxConnections: number | null,
+    ): Promise<DownloadJob | null> => {
+      const result = await window.nexfetch.jobs.setTorrentLimits({
+        jobId,
+        downloadLimitBytesPerSecond,
+        uploadLimitBytesPerSecond,
+        maxConnections,
+      })
+      if (!result.ok) {
+        showToast('error', result.error.message)
+        return null
+      }
+      upsertJob(result.data)
+      showToast('success', 'Transfer limits updated.')
+      return result.data
     },
     [showToast, upsertJob],
   )

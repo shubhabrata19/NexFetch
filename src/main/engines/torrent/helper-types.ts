@@ -29,6 +29,7 @@ export interface HelperTorrentStatus {
   peers: TorrentPeerEntry[]
   downloadLimitBytesPerSecond: number | null
   uploadLimitBytesPerSecond: number | null
+  maxConnections: number | null
   seedAfterComplete: boolean
   discovery: TorrentDiscovery
   error: string | null
