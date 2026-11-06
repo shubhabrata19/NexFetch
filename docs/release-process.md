@@ -16,6 +16,9 @@ must be treated as development previews, not as trusted public releases.
 - Do not add auto-update until artifacts are signed; an unsigned updater is a
   remote-code-execution path.
 - Never publish an artifact that fails manifest or checksum verification.
+- Publish unsigned previews as **normal releases** (not GitHub pre-releases) so
+  `releases/latest` and the version badge resolve. The title and notes carry the
+  unsigned warning; the release is still not a stable/signed build.
 - Never commit `release/` output or any bundled binary to Git.
 
 ## Prerequisites
@@ -23,8 +26,8 @@ must be treated as development previews, not as trusted public releases.
 - Windows build machine with Node.js 24+ and Git.
 - Python 3.12 only if the torrent helper must be rebuilt.
 - `npm ci` already completed.
-- The hardening branch merged to `main` (or checked out explicitly for a preview
-  build).
+- The release commit merged into the integration branch (`develop` or `main`)
+  before tagging.
 - A clean working tree (`git status` shows no changes).
 
 ## 1. Choose the version
@@ -144,28 +147,27 @@ Never publish the installer without the checksum file.
 git add package.json package-lock.json README.md
 git commit -m "Release v0.6.0"
 git tag -a v0.6.0 -m "NexFetch v0.6.0 (unsigned preview)"
-git push origin main
+git push origin develop
 git push origin v0.6.0
 ```
 
-Tags are annotated because signing is not available. Confirm CI and CodeQL are
-green for the release commit.
+Tags are annotated because signing is not available. Pushing the tag starts
+`.github/workflows/release.yml`, which checks out the tag, verifies the pinned
+binaries, builds the app and torrent helper, writes `SHA256SUMS.txt`, and creates
+the GitHub release. Confirm CI and CodeQL are green for the release commit.
 
-## 8. Create the GitHub release
+## 8. Publish the GitHub release
 
-Open the repository's **Releases** page, choose **Draft a new release**, select
-tag `v0.6.0`, and use a title such as:
+The tag workflow publishes automatically:
 
-```text
-v0.6.0 — unsigned preview
-```
+- Title: `v0.6.0 (unsigned preview)`
+- Assets: `NexFetch Setup 0.6.0.exe`, its `.blockmap`, and `SHA256SUMS.txt`
+- Marked **Latest** (not a pre-release) so `releases/latest` and the README
+  download button resolve
+- Unsigned warning included in the notes
 
-- Tick **This is a pre-release**.
-- Attach `NexFetch Setup 0.6.0.exe`, its `.blockmap` if present, and
-  `SHA256SUMS.txt`.
-- Do not attach the `win-unpacked` folder.
-
-Suggested release notes:
+If you must publish manually, use the repository's **Releases** page with the same
+title and assets. Do not mark it as a pre-release. Use the suggested notes:
 
 ```markdown
 ## Unsigned preview build
@@ -190,15 +192,16 @@ gh release create v0.6.0 `
   "release/v0.6.0/NexFetch Setup 0.6.0.exe" `
   "release/v0.6.0/NexFetch Setup 0.6.0.exe.blockmap" `
   "release/v0.6.0/SHA256SUMS.txt" `
-  --prerelease `
   --title "v0.6.0 (unsigned preview)" `
-  --notes-file release-notes.md
+  --notes-file release-notes.md `
+  --latest
 ```
 
 ## 9. Post-release checks
 
 - Download the attached installer once from GitHub and re-verify its SHA-256
   against the attached checksum file (catches upload corruption).
+- Confirm the release is marked **Latest** and the README download button resolves.
 - Confirm the CI and CodeQL runs for the release commit are green.
 - Watch Dependabot and security advisories. Publish a new patch preview for
   fixes; never replace an existing artifact silently.

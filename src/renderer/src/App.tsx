@@ -205,6 +205,33 @@ export default function App() {
     return () => window.clearTimeout(timer)
   }, [toast])
 
+  // Development-only screenshot harness used by scripts/capture-screenshots.ps1.
+  useEffect(() => {
+    if (!import.meta.env.DEV) return
+    const handler = (event: Event): void => {
+      const detail = (event as CustomEvent<string>).detail
+      if (typeof detail !== 'string') return
+      const [nextView, source] = detail.split(':')
+      if (
+        nextView !== 'downloads' &&
+        nextView !== 'torrents' &&
+        nextView !== 'history' &&
+        nextView !== 'settings'
+      ) {
+        return
+      }
+      setView(nextView)
+      if (
+        nextView === 'downloads' &&
+        (source === 'youtube' || source === 'http' || source === 'torrent')
+      ) {
+        setDownloadSource(source)
+      }
+    }
+    window.addEventListener('nexfetch:capture-view', handler)
+    return () => window.removeEventListener('nexfetch:capture-view', handler)
+  }, [])
+
   const updateSettings = useCallback(
     async (patch: SettingsPatch): Promise<Settings | null> => {
       const result = await window.nexfetch.settings.update(patch)
@@ -241,6 +268,11 @@ export default function App() {
 
   const openLogs = useCallback(async (): Promise<void> => {
     const result = await window.nexfetch.system.openLogs()
+    if (!result.ok) showToast('error', result.error.message)
+  }, [showToast])
+
+  const openReleases = useCallback(async (): Promise<void> => {
+    const result = await window.nexfetch.system.openReleases()
     if (!result.ok) showToast('error', result.error.message)
   }, [showToast])
 
@@ -644,6 +676,7 @@ export default function App() {
             onChooseDirectory={chooseDirectory}
             onRecheck={recheckDependencies}
             onOpenLogs={openLogs}
+            onOpenReleases={openReleases}
           />
         ) : null}
       </main>

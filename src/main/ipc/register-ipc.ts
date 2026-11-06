@@ -39,6 +39,9 @@ import type { EngineRegistry } from '../engines/registry'
 import type { DependencyService } from '../services/dependency-service'
 import type { Logger } from '../services/logger'
 import type { SettingsService } from '../services/settings-service'
+import { isSafeExternalUrl } from '../security'
+
+const RELEASES_URL = 'https://github.com/shubhabrata19/NexFetch/releases/latest'
 
 interface IpcDependencies {
   getWindow: () => BrowserWindow | null
@@ -60,6 +63,7 @@ const INVOKE_CHANNELS = [
   IPC.readClipboardText,
   IPC.openDestination,
   IPC.openLogs,
+  IPC.openReleases,
   IPC.dependenciesStatus,
   IPC.dependenciesRecheck,
   IPC.previewRequest,
@@ -246,6 +250,15 @@ export function registerIpc(dependencies: IpcDependencies): () => void {
       logger.warn('open_logs_failed', { error })
       throw new DomainError('PERMISSION_DENIED', 'The log folder could not be opened.')
     }
+    return null
+  })
+
+  handle<void, null>(IPC.openReleases, null, async () => {
+    if (!isSafeExternalUrl(RELEASES_URL)) {
+      throw new DomainError('INTERNAL_ERROR', 'The release page address is invalid.')
+    }
+    await shell.openExternal(RELEASES_URL)
+    logger.info('releases_page_opened')
     return null
   })
 

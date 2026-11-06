@@ -12,6 +12,7 @@ interface SettingsPageProps {
   onChooseDirectory: () => Promise<void>
   onRecheck: () => Promise<void>
   onOpenLogs: () => Promise<void>
+  onOpenReleases: () => Promise<void>
 }
 
 function platformLabel(platform: string): string {
@@ -65,6 +66,7 @@ export function SettingsPage({
   onChooseDirectory,
   onRecheck,
   onOpenLogs,
+  onOpenReleases,
 }: SettingsPageProps) {
   const [saving, setSaving] = useState(false)
   const [customRateRequested, setCustomRateRequested] = useState(false)
@@ -478,6 +480,20 @@ export function SettingsPage({
             <dt>Quality policy</dt>
             <dd>Best available up to 4K · MKV allowed · verified after merge</dd>
           </dl>
+          <div className="settings-actions">
+            <button
+              type="button"
+              className="button button--secondary button--small"
+              onClick={() => void onOpenReleases()}
+            >
+              <Icon name="download" size={16} />
+              Check for updates
+            </button>
+          </div>
+          <p className="card-footnote">
+            Opens the GitHub releases page in your browser. NexFetch does not install updates
+            automatically; download the latest unsigned preview from the release page.
+          </p>
           <p className="card-footnote">
             YouTube, HTTP, and BitTorrent are independent engines behind one queue. Torrent metadata
             is parsed locally; magnets are intentionally not accepted.

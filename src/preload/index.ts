@@ -30,6 +30,7 @@ const api: NexFetchApi = {
     readClipboardText: () => invoke(IPC.readClipboardText),
     openDestination: () => invoke(IPC.openDestination),
     openLogs: () => invoke(IPC.openLogs),
+    openReleases: () => invoke(IPC.openReleases),
   },
   dependencies: {
     getStatus: () => invoke(IPC.dependenciesStatus),
