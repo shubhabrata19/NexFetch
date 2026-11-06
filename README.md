@@ -4,6 +4,8 @@ NexFetch is a modern desktop download manager designed to grow from a focused
 YouTube downloader into a universal download manager with independent protocol
 engines.
 
+Licensed under the Apache License 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
+
 This repository currently contains the **universal manager core** with three
 working engines:
 
@@ -115,8 +117,11 @@ Packaged builds use bundled binaries from `resources/bin` and do not trust
 renderer-provided executable paths.
 
 `resources/bin/` is intentionally ignored by Git because the binaries are large.
-On Windows, `npm run fetch:win-binaries` downloads a development copy. Build the
-torrent helper once with:
+`resources/binaries.manifest.json` records the pinned versions and SHA-256
+hashes. On Windows, `npm run fetch:win-binaries` downloads those exact versions,
+verifies every archive and executable, and refuses to install a mismatch. The
+application verifies the bundled binaries again at startup and will not run a
+binary that no longer matches the manifest. Build the torrent helper once with:
 
 ```bash
 npm run build:torrent-helper
@@ -132,9 +137,12 @@ resources/bin/win32-x64/
   nexfetch-torrent-helper.exe
 ```
 
-The release build includes that directory through `extraResources`. Before a
-public release, the binaries must be pinned, checksum-verified, and license
-reviewed.
+The release build includes that directory and the manifest through
+`extraResources`. The torrent helper is built locally because PyInstaller builds
+are not reproducible enough to publish a stable hash, so it is presence-checked
+rather than hash-pinned; its Python dependencies are pinned in
+`tools/torrent-helper/requirements.txt`. Signing and notarization remain release
+workflow tasks.
 
 ## Commands
 
@@ -299,6 +307,24 @@ resources/    bundled binaries and licenses (binaries ignored by Git)
 - No cookies, credentials, DRM circumvention, paywall bypass, private-video
   access, or geo-bypass is supported.
 - Logs are local and redacted; no telemetry is sent.
+- Runtime binaries are pinned in `resources/binaries.manifest.json`; the fetch
+  script is HTTPS-only and verifies archives and executables, and the app
+  re-verifies pinned binaries with SHA-256 before running them. A modified
+  binary is refused rather than silently executed.
+
+## Responsible use
+
+NexFetch does not include DRM circumvention, paywall bypass, private-video
+access, credential theft, or geo-restriction bypass. Only download content you
+own or are permitted to download. You are responsible for complying with
+copyright law, the terms of service of the source site, and local law. The
+project is not affiliated with YouTube or any other source platform.
+
+## License
+
+NexFetch is licensed under the Apache License 2.0. See [LICENSE](LICENSE) and
+[NOTICE](NOTICE). Bundled third-party runtime tools keep their own licenses; see
+[resources/licenses/THIRD-PARTY-NOTICES.md](resources/licenses/THIRD-PARTY-NOTICES.md).
 
 ## Next milestone
 
@@ -314,4 +340,6 @@ The torrent client is implemented. The remaining release work is:
    of routine CI.
 
 See `.opencode/agents/` and `.opencode/skills/` for the project-specific
-architecture, UI, download-engine, torrent, and release guidance.
+architecture, UI, download-engine, torrent, and release guidance. These files
+are AI-agent instruction documents used during development; they are not part of
+the shipped application or a supported end-user API.

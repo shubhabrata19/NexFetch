@@ -259,6 +259,7 @@ export function registerIpc(dependencies: IpcDependencies): () => void {
     IPC.dependenciesRecheck,
     null,
     async () => {
+      await dependencyService.recheckIntegrity()
       const status = await dependencyService.getStatus()
       getWindow()?.webContents.send(IPC.dependenciesChanged, status)
       logger.info('dependencies_rechecked', {
