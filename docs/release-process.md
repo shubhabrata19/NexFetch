@@ -85,7 +85,7 @@ for a stable published hash; its Python dependencies are pinned in
 Remove-Item -Recurse -Force release\v0.6.0 -ErrorAction SilentlyContinue
 
 npm run build
-npx electron-builder --win nsis -c.directories.output=release/v0.6.0
+npx electron-builder --win nsis --config.directories.output=release/v0.6.0
 ```
 
 Expected files:

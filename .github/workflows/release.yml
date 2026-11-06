@@ -67,7 +67,7 @@ jobs:
         run: npm run build
 
       - name: Package installer
-        run: npx electron-builder --win nsis --publish never -c.directories.output=release/v${{ env.VERSION }}
+        run: npx electron-builder --win nsis --publish never --config.directories.output=release/v${{ env.VERSION }}
 
       - name: Write release checksums
         run: npm run release:checksums -- release/v${{ env.VERSION }}
