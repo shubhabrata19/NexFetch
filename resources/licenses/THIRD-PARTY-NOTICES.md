@@ -14,6 +14,9 @@ offer. This file is a summary, not a replacement for the upstream license texts.
 | libtorrent (Rasterbar) | 2.1.1                    | BSD-3-Clause                              | https://libtorrent.org                                     | Linked into the torrent helper.                                                                                                                                            |
 | PyInstaller bootloader | 6.22.3                   | GPL-2.0-or-later with a special exception | https://pyinstaller.org                                    | The exception permits distributing bundled applications under other licenses.                                                                                              |
 
+The FFmpeg build reports LGPL v3-or-later via `ffmpeg -L` because it is compiled
+with `--enable-version3`; re-check its license metadata for every release.
+
 Pinned versions and SHA-256 hashes are recorded in
 `resources/binaries.manifest.json`.
 

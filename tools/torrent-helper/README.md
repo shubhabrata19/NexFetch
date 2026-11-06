@@ -87,3 +87,9 @@ consume download queue slots.
 The helper exposes `session.*`, `torrent.*`, and `resolve.*` methods. It has no
 HTTP API, no web UI, and no remote access. It is intended to be spawned by the
 Electron main process only.
+
+## Input scope
+
+The helper does not parse magnet URIs. The desktop app passes either a local
+`.torrent` file or a v1/v2 info hash used for metadata lookup; magnet links are
+intentionally rejected at the UI and IPC boundary.

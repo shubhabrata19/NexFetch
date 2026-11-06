@@ -179,16 +179,17 @@ The full policy and checklist are in [docs/release-process.md](docs/release-proc
 npm run check
 npm run fetch:win-binaries
 npm run verify:binaries -- --require-installed
-npx electron-builder --win nsis -c.directories.output=release/v0.5.0-polish
-npm run release:checksums -- release/v0.5.0-polish
+npm run build
+npx electron-builder --win nsis -c.directories.output=release/v<version>
+npm run release:checksums -- release/v<version>
 ```
 
 Outputs:
 
 ```text
-release/v0.5.0-polish/NexFetch Setup 0.5.0.exe
-release/v0.5.0-polish/SHA256SUMS.txt
-release/v0.5.0-polish/win-unpacked/NexFetch.exe
+release/v<version>/NexFetch Setup <version>.exe
+release/v<version>/SHA256SUMS.txt
+release/v<version>/win-unpacked/NexFetch.exe
 ```
 
 The installer is unsigned, so Windows SmartScreen will warn about an unknown
@@ -201,7 +202,7 @@ binaries until Developer ID signing and notarization are available.
 Windows:
 
 ```powershell
-certutil -hashfile "NexFetch Setup 0.5.0.exe" SHA256
+certutil -hashfile "NexFetch Setup <version>.exe" SHA256
 ```
 
 Compare the result with `SHA256SUMS.txt` from the same release. On macOS/Linux,
@@ -282,15 +283,17 @@ explicit light or dark preference, and Settings offers System, Light, and Dark.
 ```text
 src/
   main/       Electron main process, IPC, services, engine registry, queue
-    download/ job manager, preview cache, generic preview service
-    engines/  YouTube, HTTP/HTTPS, and libtorrent adapter
-  tools/torrent-helper/  Python libtorrent JSON-lines helper
+    download/ job manager, preview cache, generic preview services
+    engines/  YouTube, HTTP/HTTPS, and BitTorrent adapters
     storage/  SQLite schema, repositories, JSON migration
   preload/    narrow contextBridge API
   renderer/   React UI
   shared/     domain models, IPC contracts, validation, pure policy code
+tools/
+  torrent-helper/  Python libtorrent JSON-lines helper
 tests/        Vitest unit and integration tests
-resources/    bundled binaries and licenses (binaries ignored by Git)
+resources/    bundled binaries, manifest, and licenses (binaries ignored by Git)
+docs/         release process documentation
 ```
 
 ### Boundaries
@@ -333,7 +336,8 @@ resources/    bundled binaries and licenses (binaries ignored by Git)
   private torrents.
 - Router port mapping uses NAT-PMP/UPnP only when enabled in Settings, maps one
   temporary port, and removes it on exit.
-- Info hashes and magnet-style identifiers are never written to logs.
+- Full info hashes and magnet-style identifiers are not written to logs;
+  metadata diagnostics may include only a short info-hash prefix.
 - No cookies, credentials, DRM circumvention, paywall bypass, private-video
   access, or geo-bypass is supported.
 - Logs are local and redacted; no telemetry is sent.
@@ -349,6 +353,16 @@ access, credential theft, or geo-restriction bypass. Only download content you
 own or are permitted to download. You are responsible for complying with
 copyright law, the terms of service of the source site, and local law. The
 project is not affiliated with YouTube or any other source platform.
+
+## Documentation
+
+- [Release process](docs/release-process.md) — unsigned-preview policy, build
+  checklist, checksums, and the signing gate.
+- [Security policy](SECURITY.md) — reporting, scope, threat model, and
+  maintainer repository settings.
+- [Bundled binaries](resources/README.md) and
+  [third-party notices](resources/licenses/THIRD-PARTY-NOTICES.md).
+- [Torrent helper protocol](tools/torrent-helper/README.md).
 
 ## License
 

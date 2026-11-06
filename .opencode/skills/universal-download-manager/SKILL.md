@@ -6,13 +6,13 @@ compatibility: opencode
 
 # Universal download manager architecture
 
-NexFetch's long-term goal is one desktop application for multiple lawful download types. The initial product milestone is a YouTube downloader up to 4K. Keep the architecture extensible, but implement future protocols only when explicitly requested.
+NexFetch is a desktop application for multiple lawful download types. YouTube (up to 4K), direct HTTP/HTTPS, and BitTorrent are implemented behind shared jobs, queues, and engine adapters. Keep the architecture extensible, but add new protocols only when explicitly requested.
 
 ## Source types and engines
 Plan for independent adapters:
 - **HTTP/HTTPS:** direct file downloads, redirects, server capability detection, Range-based resume where supported, content length when known, and optional checksum verification.
 - **Video platforms:** extractor-backed metadata/format discovery and downloads; begin with YouTube using `yt-dlp` and FFmpeg where needed.
-- **BitTorrent:** user-supplied magnet links and `.torrent` files, metadata resolution, piece verification, peer/seed stats, cancellation, and explicit user-controlled seeding policy.
+- **BitTorrent:** user-supplied `.torrent` files and v1/v2 info hashes, metadata-only DHT lookup, piece verification, peer/seed stats, cancellation, and explicit user-controlled seeding. Magnet links are intentionally not accepted.
 - **Future protocols:** add only through a well-defined adapter contract.
 
 Do not conflate a URL scheme with permission to download its content. Validate supported sources and surface unsupported/blocked cases clearly.
@@ -46,20 +46,20 @@ Represent unknown values honestly. Do not fabricate progress percentages, file s
 Do not promise that all engines support resuming, pausing, checksums, or the same concurrency behavior.
 
 ## UX evolution
-Start with a focused YouTube screen. As engines are added, evolve into a unified queue with All / Files / Videos / Torrents filters. Show engine-specific details only on the relevant job. Never add disabled future-engine tiles merely to imply a feature exists.
+The unified queue with All / Files / Videos / Torrents filters is implemented. Show engine-specific details only on the relevant job and never add disabled future-engine tiles merely to imply a feature exists.
 
-## Recommended phased roadmap
-1. **YouTube MVP:** metadata, actual formats up to 2160p, best-up-to-4K selection, audio-only if available, queue, progress, cancellation, errors.
-2. **HTTP/HTTPS:** direct URL downloads, redirects, resume when server supports it, safe filenames, size/progress, checksum support where available.
-3. **BitTorrent:** magnet and `.torrent` sources, verification, peer/seed status, explicit seeding controls, safe shutdown and packaging.
-4. **Additional sources:** only when there is a user need and a maintained, legally appropriate integration.
+## Implemented engine set
+1. **YouTube:** metadata, actual formats up to 2160p, best-up-to-4K selection, audio-only if available, queue, progress, cancellation, errors.
+2. **HTTP/HTTPS:** direct URL downloads, redirects, resume when the server supports it, safe filenames, size/progress, optional checksums.
+3. **BitTorrent:** `.torrent` files and v1/v2 info hashes, metadata lookup, verification, peer/seed status, explicit seeding controls, safe shutdown, and packaging.
+4. **Additional sources:** only when there is a concrete user need and a maintained, legally appropriate integration.
 
 ## Compliance boundaries
 - Support files/content the user owns, is authorized to download, or may otherwise lawfully obtain.
 - Do not bypass DRM, paywalls, membership restrictions, private-video restrictions, or other access controls.
 - Do not implement piracy search/indexing/catalogues or bundle curated infringing sources.
 - Do not silently seed/share downloaded files. Seeding must be explicit and controllable.
-- Keep credentials and private magnet information out of logs and telemetry.
+- Keep credentials and full info hashes/magnet information out of logs and telemetry.
 
 ## Testing strategy
 Use fake engines for registry, queue, concurrency, persistence, cancellation, retry, and state mapping. Keep protocol adapter tests isolated and offline. Test unsupported capabilities and malformed/malicious source data.

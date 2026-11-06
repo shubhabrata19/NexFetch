@@ -9,7 +9,7 @@ compatibility: opencode
 ## Before testing
 Inspect scripts, test framework, architecture, supported OS targets, and existing conventions. Do not invent command names; use scripts that exist.
 
-## YouTube MVP functional tests
+## YouTube adapter tests
 - Valid/malformed YouTube URL, metadata loading, missing fields/thumbnail, and long title.
 - Actual format list, no formats, unknown file size, and formats above 2160p excluded.
 - Best-up-to-4K and manual format choice; audio-only only when available.
@@ -34,11 +34,11 @@ Inspect scripts, test framework, architecture, supported OS targets, and existin
 - Scrollbars stay visually hidden while mouse, trackpad, and keyboard scrolling remain functional.
 - Focus rings, tooltips, and accessible labels are present on icon-only controls.
 
-## HTTP adapter tests (when implemented)
+## HTTP adapter tests
 Range/resume support detection, redirects, unknown content length, server errors, filename collisions, cancellation, checksums when used, and safe path handling.
 
-## BitTorrent adapter tests (when implemented)
-Magnet and `.torrent` parsing, metadata resolution, malicious filenames, path containment, piece verification, disk-space errors, duplicate jobs, peer/stat reporting, explicit seeding policy, cancellation, and shutdown. Use fake engine bindings, not public swarms.
+## BitTorrent adapter tests
+`.torrent` validation, info-hash metadata resolution, malicious filenames, path containment, piece verification, disk-space errors, duplicate jobs, peer/stat reporting, explicit seeding policy, per-torrent limits, cancellation, and shutdown. Magnet links are intentionally rejected. Use fake engine bindings, not public swarms.
 
 ## Security review
 - Electron context isolation enabled and Node integration disabled.
@@ -46,14 +46,16 @@ Magnet and `.torrent` parsing, metadata resolution, malicious filenames, path co
 - No shell interpolation for URLs, titles, paths, or format IDs.
 - No arbitrary executable path or raw command flags from renderer.
 - Safe output path containment and filename handling.
-- Logs avoid secrets, cookies, and unnecessary full magnet URIs.
+- Logs avoid secrets, cookies, and full info hashes/magnet URIs.
 - No credential harvesting, DRM circumvention, access-control bypass, or piracy-oriented discovery features.
 
 ## Packaging and dependency delivery
 - Verify platform-specific packaging and native dependency strategy.
-- Detect and explain `yt-dlp`/FFmpeg availability for the MVP.
-- For any bundled native engines/binaries, verify license notices, source, integrity, architecture, distribution size, and update process.
-- Never silently download and execute an unverified binary.
+- Detect and explain `yt-dlp`, FFmpeg, and torrent-helper availability for packaged builds.
+- Verify the pinned manifest and installed binaries with `npm run verify:manifest` and `npm run verify:binaries -- --require-installed`.
+- For any bundled native engine/binary, verify license notices, source, integrity, architecture, distribution size, and update process.
+- Never silently download and execute an unverified binary; the app must refuse a hash mismatch.
+- Follow the unsigned-preview policy in `docs/release-process.md`.
 - Verify first-run behavior when an engine dependency is unavailable.
 
 ## Reporting

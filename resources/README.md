@@ -29,7 +29,9 @@ resources/
 ```
 
 `resources/bin/*` is ignored by Git because the binaries are large. The
-`.gitkeep` file keeps the parent directory available in clean checkouts.
+`.gitkeep` file keeps the parent directory available in clean checkouts. Only
+`win32-x64` is currently listed in the manifest; macOS/Linux entries are added
+when those builds are produced and verified.
 
 ## Brand assets
 

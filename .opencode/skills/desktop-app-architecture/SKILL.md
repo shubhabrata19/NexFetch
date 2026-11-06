@@ -16,7 +16,7 @@ Prefer Electron + React + TypeScript + Vite unless the repository already has a 
 - **Preload:** narrow typed bridge exposing only explicit application capabilities.
 - **Renderer:** UI and presentation state; no direct Node APIs, shell access, or downloader process creation.
 - **Domain:** download jobs, sources, engine contracts, capabilities, queue policy, and state transitions.
-- **Adapters:** `yt-dlp` first; HTTP and BitTorrent engines later. Keep adapters replaceable and independently testable.
+- **Adapters:** `yt-dlp` for YouTube, HTTP/HTTPS, and libtorrent for BitTorrent. Keep adapters replaceable and independently testable.
 
 ## Electron security baseline
 - Use `contextIsolation: true`, `nodeIntegration: false`, and `sandbox: true` where compatible with the chosen Electron version.
@@ -42,13 +42,13 @@ Avoid making every engine implement every method. Optional behavior must be expr
 ## Job lifecycle
 A common lifecycle may include `queued → resolving → downloading → verifying → completed`, with `failed` and `cancelled` terminal paths. Engines may expose additional sub-states, such as torrent `seeding`, through typed engine-specific status. Do not force every source type into irrelevant states.
 
-## Implementation sequencing
-1. Secure desktop shell and typed IPC.
-2. Protocol-neutral job/engine contracts and fake adapter tests.
-3. YouTube adapter and 4K user flow.
-4. Generic HTTP/HTTPS engine.
-5. BitTorrent engine after platform/library review.
-6. Additional adapters only when there is a concrete use case.
+## Implementation status
+1. Secure desktop shell and typed IPC are implemented.
+2. Protocol-neutral job/engine contracts and fake adapter tests are implemented.
+3. YouTube adapter and 4K user flow are implemented.
+4. Generic HTTP/HTTPS engine is implemented.
+5. BitTorrent engine with a libtorrent helper is implemented.
+6. Additional adapters only when there is a concrete, lawful use case.
 
 Do not build a public third-party plugin marketplace in the early releases. An internal registry and adapter interface provide sufficient extensibility.
 
