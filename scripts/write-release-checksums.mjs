@@ -13,6 +13,13 @@ import { readdir, stat, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 
 const CHECKSUMS_FILE = 'SHA256SUMS.txt'
+const BUILD_METADATA_FILES = new Set([
+  'builder-debug.yml',
+  'builder-effective-config.yaml',
+  'latest.yml',
+  'latest-mac.yml',
+  'latest-linux.yml',
+])
 const directory = resolve(process.argv[2] ?? 'release')
 
 let info
@@ -39,7 +46,10 @@ function sha256File(path) {
 
 const entries = await readdir(directory, { withFileTypes: true })
 const files = entries
-  .filter((entry) => entry.isFile() && entry.name !== CHECKSUMS_FILE)
+  .filter(
+    (entry) =>
+      entry.isFile() && entry.name !== CHECKSUMS_FILE && !BUILD_METADATA_FILES.has(entry.name),
+  )
   .map((entry) => entry.name)
   .sort((a, b) => a.localeCompare(b))
 
