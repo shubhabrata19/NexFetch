@@ -1,6 +1,6 @@
 {
   "name": "nexfetch",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "NexFetch — a modern universal download manager for desktop",
   "private": true,
   "license": "Apache-2.0",
