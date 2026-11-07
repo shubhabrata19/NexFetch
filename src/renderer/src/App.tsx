@@ -12,6 +12,8 @@ import type {
 } from '@shared/ipc/contracts'
 import brandIcon from './assets/nexfetch-icon.png'
 import { ErrorPanel } from './components/ErrorPanel'
+import { RemoveDownloadDialog } from './components/RemoveDownloadDialog'
+import type { RemovalAction } from './components/RemoveDownloadDialog'
 import { Sidebar } from './components/Sidebar'
 import { Toast } from './components/Toast'
 import type { ToastState } from './components/Toast'
@@ -29,6 +31,11 @@ function resolveTheme(theme: Theme): 'light' | 'dark' {
 
 function applyTheme(theme: Theme): void {
   document.documentElement.dataset.theme = resolveTheme(theme)
+}
+
+interface RemovalRequest {
+  jobId: string
+  action: RemovalAction
 }
 
 function BootScreen() {
@@ -59,6 +66,9 @@ export default function App() {
   const [fatalError, setFatalError] = useState<string | null>(null)
   const [rechecking, setRechecking] = useState(false)
   const [toast, setToast] = useState<ToastState | null>(null)
+  const [removal, setRemoval] = useState<RemovalRequest | null>(null)
+  const [removalBusy, setRemovalBusy] = useState(false)
+  const [removingJobId, setRemovingJobId] = useState<string | null>(null)
 
   const showToast = useCallback((kind: ToastState['kind'], message: string): void => {
     setToast({ id: Date.now(), kind, message })
@@ -512,52 +522,74 @@ export default function App() {
     [jobs, showToast, upsertJob],
   )
 
-  const removeJob = useCallback(
-    (jobId: string): void => {
+  const requestRemoveJob = useCallback((jobId: string): void => {
+    setRemoval({ jobId, action: 'remove' })
+  }, [])
+
+  const requestCloseTorrent = useCallback((jobId: string): void => {
+    setRemoval({ jobId, action: 'close' })
+  }, [])
+
+  const dismissRemoval = useCallback((): void => {
+    if (removalBusy) return
+    setRemoval(null)
+  }, [removalBusy])
+
+  const confirmRemoval = useCallback(
+    (deleteFiles: boolean): void => {
       void (async () => {
-        const result = await window.nexfetch.jobs.remove({ jobId })
-        if (!result.ok) {
-          showToast('error', result.error.message)
+        const request = removal
+        if (!request) return
+        const job = jobs.find((candidate) => candidate.id === request.jobId)
+        if (!job) {
+          setRemoval(null)
           return
         }
-        setJobs((previous) => previous.filter((job) => job.id !== jobId))
-        setLastTorrentLookupId((current) => (current === jobId ? null : current))
-      })()
-    },
-    [showToast],
-  )
 
-  const closeTorrent = useCallback(
-    (jobId: string): void => {
-      void (async () => {
-        const job = jobs.find((candidate) => candidate.id === jobId)
-        if (!job) return
-
-        const terminal =
-          job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled'
+        setRemovalBusy(true)
         try {
-          if (!terminal && job.status !== 'setup') {
-            const cancelled = await window.nexfetch.jobs.cancel({ jobId })
+          const terminal =
+            job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled'
+          if (
+            request.action === 'close' &&
+            !terminal &&
+            job.status !== 'setup' &&
+            job.status !== 'paused'
+          ) {
+            const cancelled = await window.nexfetch.jobs.cancel({ jobId: job.id })
             if (!cancelled.ok) {
               showToast('error', cancelled.error.message)
               return
             }
             upsertJob(cancelled.data)
           }
-          const removed = await window.nexfetch.jobs.remove({ jobId })
+
+          const removed = await window.nexfetch.jobs.remove({ jobId: job.id, deleteFiles })
           if (!removed.ok) {
+            // Keep the dialog open so the user can retry, or remove the entry without
+            // deleting files, when the payload is locked by another program.
             showToast('error', removed.error.message)
             return
           }
-          setJobs((previous) => previous.filter((candidate) => candidate.id !== jobId))
-          setSelectedTorrentId((current) => (current === jobId ? null : current))
-          setLastTorrentLookupId((current) => (current === jobId ? null : current))
+
+          setRemoval(null)
+          const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+          setRemovingJobId(job.id)
+          if (!reducedMotion) {
+            await new Promise<void>((done) => window.setTimeout(done, 220))
+          }
+          setJobs((previous) => previous.filter((candidate) => candidate.id !== job.id))
+          setSelectedTorrentId((current) => (current === job.id ? null : current))
+          setLastTorrentLookupId((current) => (current === job.id ? null : current))
         } catch {
-          showToast('error', 'The torrent could not be closed.')
+          showToast('error', 'The download could not be removed.')
+        } finally {
+          setRemovalBusy(false)
+          setRemovingJobId(null)
         }
       })()
     },
-    [jobs, showToast, upsertJob],
+    [jobs, removal, showToast, upsertJob],
   )
 
   const openJobLocation = useCallback(
@@ -569,6 +601,8 @@ export default function App() {
     },
     [showToast],
   )
+
+  const removalJob = removal ? (jobs.find((job) => job.id === removal.jobId) ?? null) : null
 
   if (loading) return <BootScreen />
 
@@ -618,8 +652,9 @@ export default function App() {
             onResumeJob={resumeJob}
             onStopSeeding={stopSeeding}
             onRetryJob={retryJob}
-            onRemoveJob={removeJob}
+            onRequestRemoveJob={requestRemoveJob}
             onOpenJobLocation={openJobLocation}
+            removingJobId={removingJobId}
             onOpenDestination={() => {
               void openDestination()
             }}
@@ -641,8 +676,8 @@ export default function App() {
             onRetryJob={retryJob}
             onStartSeeding={startSeeding}
             onStopSeeding={stopSeeding}
-            onRemoveJob={removeJob}
-            onCloseTorrent={closeTorrent}
+            onRequestRemoveJob={requestRemoveJob}
+            onRequestCloseTorrent={requestCloseTorrent}
             onOpenLocation={openJobLocation}
             onFindMorePeers={findMorePeers}
             onVerifyTorrent={verifyTorrent}
@@ -661,8 +696,9 @@ export default function App() {
             onCancelJob={cancelJob}
             onRetryJob={retryJob}
             onStopSeeding={stopSeeding}
-            onRemoveJob={removeJob}
+            onRequestRemoveJob={requestRemoveJob}
             onOpenJobLocation={openJobLocation}
+            removingJobId={removingJobId}
           />
         ) : null}
 
@@ -680,6 +716,17 @@ export default function App() {
           />
         ) : null}
       </main>
+
+      {removal && removalJob ? (
+        <RemoveDownloadDialog
+          key={`${removal.action}-${removalJob.id}`}
+          job={removalJob}
+          action={removal.action}
+          busy={removalBusy}
+          onCancel={dismissRemoval}
+          onConfirm={confirmRemoval}
+        />
+      ) : null}
 
       <Toast toast={toast} />
     </div>

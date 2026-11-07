@@ -6,6 +6,7 @@ import type {
   EngineInfo,
   JobIdRequest,
   OpenLocationRequest,
+  RemoveJobRequest,
   Result,
   Settings,
   SettingsPatch,
@@ -74,7 +75,7 @@ export interface NexFetchApi {
     setTorrentLimits(request: TorrentLimitsRequest): Promise<Result<DownloadJob>>
     findMorePeers(request: JobIdRequest): Promise<Result<DownloadJob>>
     verifyTorrent(request: JobIdRequest): Promise<Result<DownloadJob>>
-    remove(request: JobIdRequest): Promise<Result<null>>
+    remove(request: RemoveJobRequest): Promise<Result<null>>
     openLocation(request: OpenLocationRequest): Promise<Result<null>>
     onChanged(listener: (job: DownloadJob) => void): Unsubscribe
     onRemoved(listener: (jobId: string) => void): Unsubscribe

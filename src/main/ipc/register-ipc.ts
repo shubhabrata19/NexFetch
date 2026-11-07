@@ -21,6 +21,7 @@ import {
   openLocationRequestSchema,
   previewCancelSchema,
   previewRequestSchema,
+  removeJobRequestSchema,
   torrentBytesPreviewRequestSchema,
   torrentCancelPreviewSchema,
   torrentLimitsRequestSchema,
@@ -425,8 +426,8 @@ export function registerIpc(dependencies: IpcDependencies): () => void {
     downloadManager.verifyTorrent(jobId),
   )
 
-  handle(IPC.jobsRemove, jobIdRequestSchema, async ({ jobId }) => {
-    await downloadManager.removeJob(jobId)
+  handle(IPC.jobsRemove, removeJobRequestSchema, async ({ jobId, deleteFiles }) => {
+    await downloadManager.removeJob(jobId, { deleteFiles })
     return null
   })
 

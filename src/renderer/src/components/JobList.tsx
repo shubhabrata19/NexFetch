@@ -11,12 +11,13 @@ interface JobListProps {
   emptyMessage: string
   emptyIcon: 'download' | 'history'
   pausableEngineIds?: ReadonlySet<string>
+  removingJobId?: string | null
   onCancel: (jobId: string) => void
   onPause?: (jobId: string) => void
   onResume?: (jobId: string) => void
   onStopSeeding?: (jobId: string) => void
   onRetry: (jobId: string) => void
-  onRemove: (jobId: string) => void
+  onRequestRemove: (jobId: string) => void
   onOpenLocation: (jobId: string, revealFile: boolean) => void
 }
 
@@ -138,7 +139,6 @@ function IconButton({
 function JobActions({
   job,
   compact,
-  confirmingClear,
   canPauseResume,
   onCancel,
   onPause,
@@ -147,12 +147,9 @@ function JobActions({
   onRetry,
   onOpenLocation,
   onClear,
-  onConfirmClear,
-  onCancelClear,
 }: {
   job: DownloadJob
   compact: boolean
-  confirmingClear: boolean
   canPauseResume: boolean
   onCancel: (jobId: string) => void
   onPause?: (jobId: string) => void
@@ -161,8 +158,6 @@ function JobActions({
   onRetry: (jobId: string) => void
   onOpenLocation: (jobId: string, revealFile: boolean) => void
   onClear: () => void
-  onConfirmClear: () => void
-  onCancelClear: () => void
 }) {
   const terminal = isTerminalStatus(job.status)
   const isTorrent = job.engineId === 'torrent'
@@ -171,20 +166,6 @@ function JobActions({
     (job.status === 'queued' || job.status === 'resolving' || job.status === 'downloading') &&
     onPause !== undefined
   const canResume = canPauseResume && job.status === 'paused' && onResume !== undefined
-
-  if (confirmingClear) {
-    return (
-      <div className="job-actions">
-        <IconButton
-          icon="check"
-          label="Confirm clear from history"
-          onClick={onConfirmClear}
-          tone="confirm"
-        />
-        <IconButton icon="x" label="Keep download in history" onClick={onCancelClear} />
-      </div>
-    )
-  }
 
   return (
     <div className="job-actions">
@@ -245,10 +226,16 @@ function JobActions({
         </>
       ) : null}
 
-      {terminal ? (
+      {terminal || job.status === 'paused' ? (
         <IconButton
           icon="x"
-          label={job.status === 'completed' ? 'Clear from history' : 'Clear from list'}
+          label={
+            isTorrent || job.status === 'paused'
+              ? `Remove ${job.title}`
+              : job.status === 'completed'
+                ? 'Clear from history'
+                : 'Clear from list'
+          }
           onClick={onClear}
           tone="danger"
         />
@@ -377,23 +364,25 @@ export function JobRow({
   job,
   compact = false,
   pausableEngineIds,
+  removingJobId,
   onCancel,
   onPause,
   onResume,
   onStopSeeding,
   onRetry,
-  onRemove,
+  onRequestRemove,
   onOpenLocation,
 }: {
   job: DownloadJob
   compact?: boolean
   pausableEngineIds?: ReadonlySet<string>
+  removingJobId?: string | null
   onCancel: (jobId: string) => void
   onPause?: (jobId: string) => void
   onResume?: (jobId: string) => void
   onStopSeeding?: (jobId: string) => void
   onRetry: (jobId: string) => void
-  onRemove: (jobId: string) => void
+  onRequestRemove: (jobId: string) => void
   onOpenLocation: (jobId: string, revealFile: boolean) => void
 }) {
   const detail = jobDetailLine(job)
@@ -404,8 +393,7 @@ export function JobRow({
   const canPauseResume = pausableEngineIds?.has(job.engineId) ?? false
   const scheduled = scheduledLabel(job)
   const [completionFlash, setCompletionFlash] = useState(false)
-  const [confirmingClear, setConfirmingClear] = useState(false)
-  const [removing, setRemoving] = useState(false)
+  const removing = removingJobId === job.id
   const previousStatus = useRef(job.status)
 
   useEffect(() => {
@@ -417,31 +405,6 @@ export function JobRow({
     const timer = window.setTimeout(() => setCompletionFlash(false), 900)
     return () => window.clearTimeout(timer)
   }, [job.status])
-
-  useEffect(() => {
-    if (!removing) return
-    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    const delay = reducedMotion ? 0 : 220
-    const removeTimer = window.setTimeout(() => onRemove(job.id), delay)
-    const restoreTimer = window.setTimeout(() => setRemoving(false), delay + 1200)
-    return () => {
-      window.clearTimeout(removeTimer)
-      window.clearTimeout(restoreTimer)
-    }
-  }, [job.id, onRemove, removing])
-
-  const beginRemove = (): void => {
-    setConfirmingClear(false)
-    setRemoving(true)
-  }
-
-  const beginClear = (): void => {
-    if (job.status === 'completed') {
-      setConfirmingClear(true)
-      return
-    }
-    beginRemove()
-  }
 
   return (
     <article
@@ -558,22 +521,6 @@ export function JobRow({
             </>
           )}
 
-          {job.status === 'completed' ? (
-            <div
-              className={`job-clear-confirm${confirmingClear ? ' job-clear-confirm--open' : ''}`}
-              aria-hidden={confirmingClear ? undefined : true}
-              role={confirmingClear ? 'alert' : undefined}
-            >
-              <div className="job-clear-confirm-inner">
-                <Icon name="alert" size={13} />
-                <span>
-                  Remove from history?{' '}
-                  <span className="job-clear-confirm-note">The file stays on disk.</span>
-                </span>
-              </div>
-            </div>
-          ) : null}
-
           {job.error ? (
             <p className="job-error" role="alert">
               {job.error.message}
@@ -586,7 +533,6 @@ export function JobRow({
       <JobActions
         job={job}
         compact={compact}
-        confirmingClear={confirmingClear}
         canPauseResume={canPauseResume}
         onCancel={onCancel}
         onPause={onPause}
@@ -594,9 +540,7 @@ export function JobRow({
         onStopSeeding={onStopSeeding}
         onRetry={onRetry}
         onOpenLocation={onOpenLocation}
-        onClear={beginClear}
-        onConfirmClear={beginRemove}
-        onCancelClear={() => setConfirmingClear(false)}
+        onClear={() => onRequestRemove(job.id)}
       />
     </article>
   )
@@ -608,12 +552,13 @@ export function JobList({
   emptyMessage,
   emptyIcon,
   pausableEngineIds,
+  removingJobId,
   onCancel,
   onPause,
   onResume,
   onStopSeeding,
   onRetry,
-  onRemove,
+  onRequestRemove,
   onOpenLocation,
 }: JobListProps) {
   if (jobs.length === 0) {
@@ -642,12 +587,13 @@ export function JobList({
           key={job.id}
           job={job}
           pausableEngineIds={pausableEngineIds}
+          removingJobId={removingJobId}
           onCancel={onCancel}
           onPause={onPause}
           onResume={onResume}
           onStopSeeding={onStopSeeding}
           onRetry={onRetry}
-          onRemove={onRemove}
+          onRequestRemove={onRequestRemove}
           onOpenLocation={onOpenLocation}
         />
       ))}

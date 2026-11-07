@@ -37,8 +37,8 @@ interface TorrentsPageProps {
   onRetryJob: (jobId: string) => void
   onStartSeeding: (jobId: string) => void
   onStopSeeding: (jobId: string) => void
-  onRemoveJob: (jobId: string) => void
-  onCloseTorrent: (jobId: string) => void
+  onRequestRemoveJob: (jobId: string) => void
+  onRequestCloseTorrent: (jobId: string) => void
   onOpenLocation: (jobId: string, revealFile: boolean) => void
   onFindMorePeers: (jobId: string) => void
   onVerifyTorrent: (jobId: string) => void
@@ -701,8 +701,8 @@ export function TorrentsPage({
   onRetryJob,
   onStartSeeding,
   onStopSeeding,
-  onRemoveJob,
-  onCloseTorrent,
+  onRequestRemoveJob,
+  onRequestCloseTorrent,
   onOpenLocation,
   onFindMorePeers,
   onVerifyTorrent,
@@ -1055,19 +1055,7 @@ export function TorrentsPage({
                       }}
                       onPause={() => onPauseJob(job.id)}
                       onResume={() => onResumeJob(job.id)}
-                      onClose={() => {
-                        const message =
-                          job.status === 'metadata'
-                            ? 'Cancel this metadata lookup and remove it from the list?'
-                            : job.status === 'setup'
-                              ? 'Discard this torrent setup?'
-                              : job.status === 'completed' ||
-                                  job.status === 'failed' ||
-                                  job.status === 'cancelled'
-                                ? 'Remove this torrent from the list? Downloaded files stay on disk.'
-                                : 'Close this torrent? Partial files stay on disk.'
-                        if (window.confirm(message)) onCloseTorrent(job.id)
-                      }}
+                      onClose={() => onRequestCloseTorrent(job.id)}
                     />
                   ))}
                 </div>
@@ -1182,10 +1170,7 @@ export function TorrentsPage({
                     <button
                       type="button"
                       className="button button--ghost button--small"
-                      onClick={() => {
-                        onRemoveJob(selected.id)
-                        onSelectJob(null)
-                      }}
+                      onClick={() => onRequestRemoveJob(selected.id)}
                     >
                       Remove
                     </button>
@@ -1369,10 +1354,7 @@ export function TorrentsPage({
                     <button
                       type="button"
                       className="button button--ghost"
-                      onClick={() => {
-                        onRemoveJob(selected.id)
-                        onSelectJob(null)
-                      }}
+                      onClick={() => onRequestRemoveJob(selected.id)}
                     >
                       Cancel
                     </button>
@@ -1667,13 +1649,7 @@ export function TorrentsPage({
                       <button
                         type="button"
                         className="button button--danger button--small"
-                        onClick={() => {
-                          const message =
-                            selected.status === 'seeding'
-                              ? 'Remove this torrent? Seeding will stop and partial files stay on disk.'
-                              : 'Remove this torrent? Partial files stay on disk.'
-                          if (window.confirm(message)) onCancelJob(selected.id)
-                        }}
+                        onClick={() => onRequestCloseTorrent(selected.id)}
                       >
                         <Icon name="trash" size={14} /> Remove torrent
                       </button>

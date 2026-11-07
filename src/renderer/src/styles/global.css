@@ -2856,48 +2856,6 @@ body:has(.page--torrents) .toast {
   border-radius: 6px;
 }
 
-.job-clear-confirm {
-  display: grid;
-  grid-template-rows: 0fr;
-  margin-top: 0;
-  overflow: hidden;
-  opacity: 0;
-  transition:
-    grid-template-rows var(--motion-base) var(--ease-standard),
-    margin-top var(--motion-base) var(--ease-standard),
-    opacity var(--motion-fast) var(--ease-standard);
-}
-
-.job-clear-confirm--open {
-  grid-template-rows: 1fr;
-  margin-top: 8px;
-  opacity: 1;
-}
-
-.job-clear-confirm-inner {
-  display: flex;
-  align-items: flex-start;
-  min-height: 0;
-  gap: 6px;
-  padding: 7px 8px;
-  overflow: hidden;
-  color: var(--warning);
-  font-size: 10.5px;
-  line-height: 1.4;
-  background: var(--warning-soft);
-  border: 1px solid color-mix(in srgb, var(--warning) 28%, transparent);
-  border-radius: 7px;
-}
-
-.job-clear-confirm-inner svg {
-  flex: 0 0 auto;
-  margin-top: 1px;
-}
-
-.job-clear-confirm-note {
-  color: var(--muted);
-}
-
 .job-row--removing {
   pointer-events: none;
   animation: queue-card-out 220ms var(--ease-standard) forwards;
@@ -4483,5 +4441,185 @@ body:has(.page--torrents) .toast {
 
   .torrent-limit-summary {
     margin-left: 0;
+  }
+}
+
+/* Removal confirmation dialog */
+
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: color-mix(in srgb, var(--bg) 24%, rgba(12, 4, 7, 0.6));
+  backdrop-filter: blur(3px);
+  animation: dialog-overlay-in var(--motion-base) var(--ease-standard);
+}
+
+.dialog {
+  width: min(480px, 100%);
+  max-height: min(82vh, 620px);
+  padding: 22px;
+  overflow: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  animation: dialog-in var(--motion-base) var(--ease-standard);
+}
+
+.dialog-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.dialog-icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  color: var(--accent-text);
+  background: var(--accent-soft);
+  border-radius: 10px;
+  transition:
+    color var(--motion-fast) var(--ease-standard),
+    background-color var(--motion-fast) var(--ease-standard);
+}
+
+.dialog-icon--danger {
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.dialog-heading {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.dialog-heading h2 {
+  margin: 0 0 6px;
+  font-size: 17px;
+  line-height: 1.25;
+}
+
+.dialog-copy {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.dialog-path {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 14px 0 0;
+  padding: 8px 10px;
+  overflow: hidden;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.dialog-path svg {
+  flex: 0 0 auto;
+}
+
+.dialog-path span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dialog-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 12px;
+  cursor: pointer;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  transition:
+    background-color var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard);
+}
+
+.dialog-option:hover {
+  border-color: var(--border-strong);
+}
+
+.dialog-option--checked {
+  background: var(--danger-soft);
+  border-color: color-mix(in srgb, var(--danger) 42%, var(--border));
+}
+
+.dialog-option input {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  margin: 2px 0 0;
+  cursor: pointer;
+  accent-color: var(--danger);
+}
+
+.dialog-option input:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.dialog-option-copy strong {
+  display: block;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.dialog-option-copy small {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+@keyframes dialog-overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dialog-overlay,
+  .dialog {
+    animation: none;
   }
 }

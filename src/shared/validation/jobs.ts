@@ -148,6 +148,13 @@ export const jobIdRequestSchema = z
   })
   .strict()
 
+export const removeJobRequestSchema = z
+  .object({
+    jobId: z.string().min(1).max(100),
+    deleteFiles: z.boolean().optional(),
+  })
+  .strict()
+
 export const openLocationRequestSchema = z
   .object({
     jobId: z.string().min(1).max(100),

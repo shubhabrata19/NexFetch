@@ -7,8 +7,9 @@ interface HistoryPageProps {
   onCancelJob: (jobId: string) => void
   onRetryJob: (jobId: string) => void
   onStopSeeding: (jobId: string) => void
-  onRemoveJob: (jobId: string) => void
+  onRequestRemoveJob: (jobId: string) => void
   onOpenJobLocation: (jobId: string, revealFile: boolean) => void
+  removingJobId?: string | null
 }
 
 type HistoryFilter = 'all' | 'files' | 'videos' | 'torrents'
@@ -25,8 +26,9 @@ export function HistoryPage({
   onCancelJob,
   onRetryJob,
   onStopSeeding,
-  onRemoveJob,
+  onRequestRemoveJob,
   onOpenJobLocation,
+  removingJobId,
 }: HistoryPageProps) {
   const [filter, setFilter] = useState<HistoryFilter>('all')
   const terminalJobs = jobs.filter((job) =>
@@ -46,8 +48,8 @@ export function HistoryPage({
           <p className="eyebrow">Archive</p>
           <h1>History</h1>
           <p className="page-subtitle">
-            Completed, failed, cancelled, and seeding jobs. Clearing history never deletes
-            downloaded files.
+            Completed, failed, cancelled, and seeding jobs. Removing an entry keeps its files on
+            disk unless you choose to delete them.
           </p>
         </div>
         <span className="badge badge--neutral">
@@ -99,8 +101,9 @@ export function HistoryPage({
         onCancel={onCancelJob}
         onRetry={onRetryJob}
         onStopSeeding={onStopSeeding}
-        onRemove={onRemoveJob}
+        onRequestRemove={onRequestRemoveJob}
         onOpenLocation={onOpenJobLocation}
+        removingJobId={removingJobId}
       />
     </div>
   )

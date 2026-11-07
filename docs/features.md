@@ -55,8 +55,10 @@ behind one queue, one history, and one persistence layer.
 - Configurable concurrency (1–5 downloads) with one-time scheduling.
 - Live progress, speed, ETA, pause/resume, cancel, retry, and deterministic
   workspace cleanup.
-- Completion moves files into the chosen destination with conflict-safe names;
-  clearing history never deletes downloaded files.
+- Completion moves files into the chosen destination with conflict-safe names.
+  Removing an entry keeps its files on disk by default; the removal dialog offers
+  an opt-in **Also delete … from disk** checkbox for torrents, whether they are
+  completed, paused, failed, cancelled, or still active.
 - SQLite persistence through Electron's built-in `node:sqlite`, with automatic
   JSON migration from pre-SQLite releases and corrupt-file quarantine.
 - History filters for All / Files / Videos / Torrents.

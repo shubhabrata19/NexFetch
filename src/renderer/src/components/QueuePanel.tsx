@@ -11,10 +11,11 @@ interface QueuePanelProps {
   onResume: (jobId: string) => void
   onStopSeeding: (jobId: string) => void
   onRetry: (jobId: string) => void
-  onRemove: (jobId: string) => void
+  onRequestRemove: (jobId: string) => void
   onOpenLocation: (jobId: string, revealFile: boolean) => void
   onOpenDestination: () => void
   onViewHistory: () => void
+  removingJobId?: string | null
 }
 
 export function QueuePanel({
@@ -25,10 +26,11 @@ export function QueuePanel({
   onResume,
   onStopSeeding,
   onRetry,
-  onRemove,
+  onRequestRemove,
   onOpenLocation,
   onOpenDestination,
   onViewHistory,
+  removingJobId,
 }: QueuePanelProps) {
   const pausableEngineIds = new Set(
     engines.filter((engine) => engine.capabilities.pauseResume).map((engine) => engine.id),
@@ -70,8 +72,9 @@ export function QueuePanel({
                     onResume={onResume}
                     onStopSeeding={onStopSeeding}
                     onRetry={onRetry}
-                    onRemove={onRemove}
+                    onRequestRemove={onRequestRemove}
                     onOpenLocation={onOpenLocation}
+                    removingJobId={removingJobId}
                   />
                 ))}
               </div>
@@ -101,8 +104,9 @@ export function QueuePanel({
                     onResume={onResume}
                     onStopSeeding={onStopSeeding}
                     onRetry={onRetry}
-                    onRemove={onRemove}
+                    onRequestRemove={onRequestRemove}
                     onOpenLocation={onOpenLocation}
+                    removingJobId={removingJobId}
                   />
                 ))}
               </div>

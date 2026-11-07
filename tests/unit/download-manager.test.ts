@@ -238,6 +238,49 @@ function torrentPreview(): TorrentPreview {
   }
 }
 
+function torrentDetailsFor(paths: string[]): TorrentJobDetails {
+  return {
+    engineId: 'torrent',
+    infoHash: TORRENT_HASH,
+    hashVersion: 1,
+    isPrivate: false,
+    files: paths.map((path, index) => ({
+      index,
+      path,
+      name: path.split('/').pop() ?? path,
+      sizeBytes: 10,
+      selected: true,
+      executable: false,
+      downloadedBytes: null,
+    })),
+    trackers: [],
+    peers: [],
+    seedsConnected: null,
+    seedsAvailable: null,
+    peersConnected: null,
+    peersAvailable: null,
+    downloadRateBytesPerSecond: null,
+    uploadRateBytesPerSecond: null,
+    uploadedBytes: null,
+    ratio: null,
+    downloadLimitBytesPerSecond: null,
+    uploadLimitBytesPerSecond: null,
+    maxConnections: null,
+    seedAfterComplete: false,
+    discovery: {
+      dht: true,
+      pex: true,
+      lsd: true,
+      natMapping: false,
+      natStatus: null,
+      listenPort: null,
+      incomingConnections: false,
+      dhtNodes: null,
+      webSeeds: 'disabled',
+    },
+  }
+}
+
 function metadataProvider(): {
   provider: TorrentMetadataProvider
   release: (value: { preview: TorrentPreview; metadataPath: string }) => void
@@ -555,6 +598,80 @@ describe('download manager', () => {
       'failed',
     )
     await fixture.manager.removeJob(job.id)
+    await fixture.manager.shutdown()
+  })
+
+  it('deletes torrent payload files when removal asks for it', async () => {
+    const fixture = createFixture('complete')
+    const job = await fixture.manager.createJob({
+      previewToken: fixture.previewToken,
+      selection: { mode: 'best-up-to-4k' },
+      destination: fixture.destination,
+    })
+    await waitFor(() => fixture.manager.getJob(job.id)?.status === 'completed')
+
+    const outputPath = join(fixture.destination, 'fake-output.mp4')
+    expect(existsSync(outputPath)).toBe(true)
+
+    const persisted = fixture.jobs.get(job.id)
+    expect(persisted).not.toBeNull()
+    fixture.jobs.save({
+      ...persisted!,
+      engineId: 'torrent',
+      details: torrentDetailsFor(['fake-output.mp4']),
+    })
+
+    await fixture.manager.removeJob(job.id, { deleteFiles: true })
+
+    expect(fixture.manager.getJob(job.id)).toBeNull()
+    expect(existsSync(outputPath)).toBe(false)
+    await fixture.manager.shutdown()
+  })
+
+  it('keeps the job when some payload files cannot be deleted', async () => {
+    const fixture = createFixture('complete')
+    const job = await fixture.manager.createJob({
+      previewToken: fixture.previewToken,
+      selection: { mode: 'best-up-to-4k' },
+      destination: fixture.destination,
+    })
+    await waitFor(() => fixture.manager.getJob(job.id)?.status === 'completed')
+
+    const persisted = fixture.jobs.get(job.id)
+    expect(persisted).not.toBeNull()
+    fixture.jobs.save({
+      ...persisted!,
+      engineId: 'torrent',
+      details: torrentDetailsFor(['fake-output.mp4', '../outside.txt']),
+    })
+
+    await expect(fixture.manager.removeJob(job.id, { deleteFiles: true })).rejects.toMatchObject({
+      code: 'PERMISSION_DENIED',
+    })
+    expect(fixture.manager.getJob(job.id)).not.toBeNull()
+
+    // Removing again without deleting files clears the entry.
+    await fixture.manager.removeJob(job.id)
+    expect(fixture.manager.getJob(job.id)).toBeNull()
+    await fixture.manager.shutdown()
+  })
+
+  it('removes a paused job and its workspace', async () => {
+    const fixture = createFixture('hang', { pauseResume: true })
+    const job = await fixture.manager.createJob({
+      previewToken: fixture.previewToken,
+      selection: { mode: 'best-up-to-4k' },
+      destination: fixture.destination,
+    })
+
+    await waitFor(() => fixture.manager.getJob(job.id)?.status === 'downloading')
+    await fixture.manager.pauseJob(job.id)
+    expect(existsSync(join(fixture.destination, '.nexfetch-tmp', job.id))).toBe(true)
+
+    await fixture.manager.removeJob(job.id)
+
+    expect(fixture.manager.getJob(job.id)).toBeNull()
+    expect(existsSync(join(fixture.destination, '.nexfetch-tmp', job.id))).toBe(false)
     await fixture.manager.shutdown()
   })
 })

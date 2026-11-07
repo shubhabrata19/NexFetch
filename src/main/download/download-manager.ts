@@ -668,9 +668,14 @@ export class DownloadManager {
     return toJobView(job)
   }
 
-  async removeJob(jobId: string): Promise<void> {
+  async removeJob(jobId: string, options: { deleteFiles?: boolean } = {}): Promise<void> {
     const job = this.getOrThrow(jobId)
-    if (job.status !== 'setup' && job.status !== 'metadata' && !isTerminal(job.status)) {
+    if (
+      job.status !== 'setup' &&
+      job.status !== 'metadata' &&
+      job.status !== 'paused' &&
+      !isTerminal(job.status)
+    ) {
       throw new DomainError('INVALID_REQUEST', 'Cancel an active download before removing it.')
     }
 
@@ -690,6 +695,29 @@ export class DownloadManager {
         error: error instanceof Error ? error.message : String(error),
       })
     }
+
+    if (options.deleteFiles && job.engineId === 'torrent') {
+      const deletion = await this.options.files.deleteTorrentFiles(toJobView(job))
+      if (deletion.failures.length > 0) {
+        this.options.logger.warn('job_files_delete_failed', {
+          jobId,
+          deletedFiles: deletion.deletedFiles,
+          failedFiles: deletion.failures.length,
+        })
+        throw new DomainError(
+          'PERMISSION_DENIED',
+          deletion.deletedFiles > 0
+            ? 'Some downloaded files could not be deleted. Close any app using them, then try removing again.'
+            : 'The downloaded files could not be deleted. Close any app using them, then try again.',
+        )
+      }
+      this.options.logger.info('job_files_deleted', {
+        jobId,
+        deletedFiles: deletion.deletedFiles,
+        deletedBytes: deletion.deletedBytes,
+      })
+    }
+
     this.options.jobs.remove(jobId)
     this.options.onJobRemoved(jobId)
     if (workspace) {

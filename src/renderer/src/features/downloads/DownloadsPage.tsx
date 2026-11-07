@@ -27,11 +27,12 @@ interface DownloadsPageProps {
   onResumeJob: (jobId: string) => void
   onStopSeeding: (jobId: string) => void
   onRetryJob: (jobId: string) => void
-  onRemoveJob: (jobId: string) => void
+  onRequestRemoveJob: (jobId: string) => void
   onOpenJobLocation: (jobId: string, revealFile: boolean) => void
   onOpenDestination: () => void
   onOpenSettings: () => void
   onViewHistory: () => void
+  removingJobId?: string | null
 }
 
 export type SourceTab = 'youtube' | 'http' | 'torrent'
@@ -53,11 +54,12 @@ export function DownloadsPage({
   onResumeJob,
   onStopSeeding,
   onRetryJob,
-  onRemoveJob,
+  onRequestRemoveJob,
   onOpenJobLocation,
   onOpenDestination,
   onOpenSettings,
   onViewHistory,
+  removingJobId,
 }: DownloadsPageProps) {
   return (
     <div className="page page--downloads">
@@ -139,10 +141,11 @@ export function DownloadsPage({
           onResume={onResumeJob}
           onStopSeeding={onStopSeeding}
           onRetry={onRetryJob}
-          onRemove={onRemoveJob}
+          onRequestRemove={onRequestRemoveJob}
           onOpenLocation={onOpenJobLocation}
           onOpenDestination={onOpenDestination}
           onViewHistory={onViewHistory}
+          removingJobId={removingJobId}
         />
       </div>
     </div>

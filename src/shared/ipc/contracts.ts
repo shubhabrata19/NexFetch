@@ -112,6 +112,11 @@ export interface JobIdRequest {
   jobId: string
 }
 
+export interface RemoveJobRequest extends JobIdRequest {
+  /** Delete the torrent payload from disk as well. Only honored for torrent jobs. */
+  deleteFiles?: boolean
+}
+
 export interface OpenLocationRequest {
   jobId: string
   revealFile?: boolean
