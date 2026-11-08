@@ -58,6 +58,14 @@ function checkHttpsUrl(value, label) {
     if (url.protocol !== 'https:') {
       problems.push(`${label}: URL must use HTTPS (${value}).`)
     }
+    if (
+      /\/releases\/download\/latest\//i.test(url.pathname) ||
+      /\/releases\/latest\/download\//i.test(url.pathname)
+    ) {
+      problems.push(
+        `${label}: URL must reference an immutable release tag, not a rolling "latest" tag (${value}).`,
+      )
+    }
   } catch {
     problems.push(`${label}: invalid URL (${String(value)}).`)
   }

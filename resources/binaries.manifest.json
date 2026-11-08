@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-06",
-  "notes": "Pinned runtime binaries. Downloads are verified against these SHA-256 values by scripts/fetch-win-binaries.ps1 and again at application startup. Update this file through a reviewed pull request when bumping a version.",
+  "updatedAt": "2026-11-08",
+  "notes": "Pinned runtime binaries. Downloads are verified against these SHA-256 values by scripts/fetch-win-binaries.ps1 and again at application startup. Download URLs must reference an immutable release tag, never a rolling latest tag. Update this file through a reviewed pull request when bumping a version.",
   "platforms": {
     "win32-x64": {
       "yt-dlp": {
@@ -14,26 +14,26 @@
       },
       "ffmpeg": {
         "file": "ffmpeg.exe",
-        "version": "n9.0.2-47-gb204e94e90-20261105",
-        "sha256": "a502236803095e00ca2b6febf4617c10018198bbc52bb29401653859d000fe62",
+        "version": "n9.0.2-48-gd4070a14ce-20261107",
+        "sha256": "71ac0a64a4e3e0caaf7a8c25c7e73d161ac1b269cca930d207e89e1b23959dfb",
         "archive": {
-          "name": "ffmpeg-n9.0-latest-win64-lgpl-9.0.zip",
-          "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n9.0-latest-win64-lgpl-9.0.zip",
-          "sha256": "3ef1842c32bb9a6fb72d4edc5df8c9ecde66ebf84b6f1f35c0e5ac8e4a68b5f1",
-          "member": "ffmpeg-n9.0-latest-win64-lgpl-9.0/bin/ffmpeg.exe"
+          "name": "ffmpeg-n9.0.2-48-gd4070a14ce-win64-lgpl-9.0.zip",
+          "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-11-07-12-47/ffmpeg-n9.0.2-48-gd4070a14ce-win64-lgpl-9.0.zip",
+          "sha256": "7a347fb3220968b63fc7e025ed78370588726e0d0bf2bd0445d3f8f2387c36db",
+          "member": "ffmpeg-n9.0.2-48-gd4070a14ce-win64-lgpl-9.0/bin/ffmpeg.exe"
         },
         "source": "https://github.com/BtbN/FFmpeg-Builds",
         "license": "LGPL-3.0-or-later"
       },
       "ffprobe": {
         "file": "ffprobe.exe",
-        "version": "n9.0.2-47-gb204e94e90-20261105",
-        "sha256": "5c0a9c0a54571b188b19d995d15bdd2daeef68a72dbe9255a4f2418a32e342e5",
+        "version": "n9.0.2-48-gd4070a14ce-20261107",
+        "sha256": "88abaa76c626db34a48795dc42f987e991df426913720ef15a7053063b3c22b4",
         "archive": {
-          "name": "ffmpeg-n9.0-latest-win64-lgpl-9.0.zip",
-          "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n9.0-latest-win64-lgpl-9.0.zip",
-          "sha256": "3ef1842c32bb9a6fb72d4edc5df8c9ecde66ebf84b6f1f35c0e5ac8e4a68b5f1",
-          "member": "ffmpeg-n9.0-latest-win64-lgpl-9.0/bin/ffprobe.exe"
+          "name": "ffmpeg-n9.0.2-48-gd4070a14ce-win64-lgpl-9.0.zip",
+          "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-11-07-12-47/ffmpeg-n9.0.2-48-gd4070a14ce-win64-lgpl-9.0.zip",
+          "sha256": "7a347fb3220968b63fc7e025ed78370588726e0d0bf2bd0445d3f8f2387c36db",
+          "member": "ffmpeg-n9.0.2-48-gd4070a14ce-win64-lgpl-9.0/bin/ffprobe.exe"
         },
         "source": "https://github.com/BtbN/FFmpeg-Builds",
         "license": "LGPL-3.0-or-later"

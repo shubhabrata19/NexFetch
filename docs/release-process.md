@@ -58,6 +58,8 @@ npm run fetch:win-binaries
 
 - Installs only the versions pinned in `resources/binaries.manifest.json`.
 - Verifies the download archive and every extracted executable with SHA-256.
+- Requires immutable release URLs. Never pin a rolling `latest` download URL:
+  upstream rebuilds change the archive hash and block the release workflow.
 - Leaves already-correct files untouched and fails loudly on a mismatch.
 
 If the torrent helper is missing:
