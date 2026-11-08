@@ -277,10 +277,12 @@ export class DependencyService {
         stdio: ['ignore', 'pipe', 'pipe'],
       })
 
+      // PyInstaller one-file binaries such as yt-dlp can take several seconds to
+      // unpack and start on a cold cache, so allow a generous startup window.
       const timer = setTimeout(() => {
         child.kill()
         finish(null)
-      }, 5000)
+      }, 20_000)
 
       const collect = (chunk: Buffer): void => {
         if (output.length < 16_384) output += chunk.toString('utf8')
